@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0d0d0d;
+  --color-surface: #131313;
+  --color-card: #161616;
+  --color-card-hover: #1a1a1a;
+  --color-border: #222222;
+  --color-border-light: #2a2a2a;
+  --color-green: #00ff41;
+  --color-teal: #00e5ff;
+  --color-red: #ff004d;
+  --color-yellow: #ffd700;
+  --color-pink: #ff79c6;
+  --color-purple: #bd93f9;
+  --color-text: #e8e8e8;
+  --color-text-dim: #999999;
+  --color-text-faint: #555555;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(0, 229, 255, 0.25);
+  color: #ffffff;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-faint);
+}
+
+.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+code.hljs {
+  font-family: var(--font-mono) !important;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.hljs-keyword { color: #ff79c6; }
+.hljs-string { color: #f1fa8c; }
+.hljs-comment { color: #6272a4; }
+.hljs-function { color: #50fa7b; }
+.hljs-number { color: #bd93f9; }
+.hljs-built_in { color: #8be9fd; }
+.hljs-attr { color: #f8f8f2; }
+.hljs-title { color: #50fa7b; }
+.hljs-literal { color: #bd93f9; }
+.hljs-type { color: #8be9fd; }
+.hljs-params { color: #f8f8f2; }
+.hljs-meta { color: #f1fa8c; }
+.hljs-tag { color: #ff79c6; }
+.hljs-name { color: #ff79c6; }
+.hljs-selector-class { color: #50fa7b; }
+.hljs-selector-id { color: #50fa7b; }

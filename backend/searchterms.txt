@@ -1,0 +1,32 @@
+# Custom search terms for sensitive data detection
+# Add one term per line — each line is treated as a case-insensitive substring search
+# Lines starting with # are ignored
+
+mysqli_connect(
+BEGIN RSA PRIVATE KEY
+-----BEGIN
+wp-config.php
+Return-Path:
+insert into
+INSERT INTO
+.onion
+github_pat_
+sk_live_
+rk_live_
+client_secret
+jdbc:
+mongodb://
+mongodb+srv://
+mysql://
+postgresql://
+redis://
+authorization: basic
+authorization: bearer
+api_key
+api_secret
+secret_key
+password =
+passwd =
+pwd =
+db_password
+db_username

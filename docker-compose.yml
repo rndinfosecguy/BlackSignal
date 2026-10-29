@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "9090:80"
+    volumes:
+      - ./raw_pastes:/app/raw_pastes:ro
+      - ./data:/app/data
+      - ./backend/searchterms.txt:/app/configs/searchterms.txt:ro
+    environment:
+      - RAW_PASTES_DIR=/app/raw_pastes
+      - DB_PATH=/app/data/pastes.db
+      - REINDEX_INTERVAL=86400
+      - AUTH_USER=admin
+      - AUTH_PASSWORD=
+      - SEARCH_TERMS_FILE=/app/configs/searchterms.txt
+    restart: unless-stopped
