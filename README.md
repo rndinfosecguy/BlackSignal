@@ -1,6 +1,6 @@
 # BlackSignal
 
-![image](bs_big_logo.jpg)
+![image](bs_logo.png)
 
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
 
