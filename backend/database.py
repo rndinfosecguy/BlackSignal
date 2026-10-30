@@ -15,8 +15,8 @@ def get_conn():
         _local.conn.row_factory = sqlite3.Row
         _local.conn.execute("PRAGMA busy_timeout=10000")
         _local.conn.execute("PRAGMA synchronous=NORMAL")
-        _local.conn.execute("PRAGMA cache_size=-64000")
-        _local.conn.execute("PRAGMA temp_store=MEMORY")
+        _local.conn.execute("PRAGMA cache_size=-8192")
+        _local.conn.execute("PRAGMA temp_store=FILE")
     return _local.conn
 
 
@@ -252,43 +252,46 @@ def get_secret_types():
 
 def get_stats():
     conn = get_conn()
-    total = conn.execute("SELECT COUNT(*) FROM pastes").fetchone()[0]
-    with_secrets = conn.execute("SELECT COUNT(*) FROM pastes WHERE has_secrets = 1").fetchone()[0]
-    with_passwords = conn.execute("SELECT COUNT(*) FROM pastes WHERE has_passwords = 1").fetchone()[0]
-    sources = conn.execute("SELECT COUNT(DISTINCT source) FROM pastes").fetchone()[0]
-    return {
-        "total": total,
-        "with_secrets": with_secrets,
-        "with_passwords": with_passwords,
-        "sources": sources,
-        "total_all": total,
-        "with_secrets_all": with_secrets,
-        "with_passwords_all": with_passwords,
-        "sources_all": sources,
-    }
+    row = conn.execute("""
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END) as with_secrets,
+               SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END) as with_passwords,
+               COUNT(DISTINCT source) as sources
+        FROM pastes
+    """).fetchone()
+    d = dict(row)
+    d["total_all"] = d["total"]
+    d["with_secrets_all"] = d["with_secrets"]
+    d["with_passwords_all"] = d["with_passwords"]
+    d["sources_all"] = d["sources"]
+    return d
 
 
 def get_stats_filtered(conditions, params):
     conn = get_conn()
     where = " AND ".join(conditions) if conditions else "1=1"
 
-    total_all = conn.execute("SELECT COUNT(*) FROM pastes").fetchone()[0]
-    total = conn.execute(f"SELECT COUNT(*) FROM pastes p WHERE {where}", params).fetchone()[0]
+    row = conn.execute(f"""
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END) as with_secrets,
+               SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END) as with_passwords,
+               COUNT(DISTINCT source) as sources
+        FROM pastes p WHERE {where}
+    """, params).fetchone()
 
-    secrets_all = conn.execute("SELECT COUNT(*) FROM pastes WHERE has_secrets = 1").fetchone()[0]
-    secrets = conn.execute(f"SELECT COUNT(*) FROM pastes p WHERE {where} AND p.has_secrets = 1", params).fetchone()[0]
-
-    passwords_all = conn.execute("SELECT COUNT(*) FROM pastes WHERE has_passwords = 1").fetchone()[0]
-    passwords = conn.execute(f"SELECT COUNT(*) FROM pastes p WHERE {where} AND p.has_passwords = 1", params).fetchone()[0]
-
-    sources_all = conn.execute("SELECT COUNT(DISTINCT source) FROM pastes").fetchone()[0]
-    sources = conn.execute(f"SELECT COUNT(DISTINCT source) FROM pastes p WHERE {where}", params).fetchone()[0]
+    all_row = conn.execute("""
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END) as with_secrets,
+               SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END) as with_passwords,
+               COUNT(DISTINCT source) as sources
+        FROM pastes
+    """).fetchone()
 
     return {
-        "total": total, "total_all": total_all,
-        "with_secrets": secrets, "with_secrets_all": secrets_all,
-        "with_passwords": passwords, "with_passwords_all": passwords_all,
-        "sources": sources, "sources_all": sources_all,
+        "total": row["total"], "total_all": all_row["total"],
+        "with_secrets": row["with_secrets"], "with_secrets_all": all_row["with_secrets"],
+        "with_passwords": row["with_passwords"], "with_passwords_all": all_row["with_passwords"],
+        "sources": row["sources"], "sources_all": all_row["sources"],
     }
 
 

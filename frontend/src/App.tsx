@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import SearchBar from './components/SearchBar'
 import FilterChips from './components/FilterChips'
 import PasteCard from './components/PasteCard'
@@ -6,11 +6,14 @@ import PasteDetail from './components/PasteDetail'
 import StatsDashboard from './components/StatsDashboard'
 import Pagination from './components/Pagination'
 import { usePastes } from './hooks/usePastes'
+import type { FilterState } from './hooks/usePastes'
+
+type Overrides = Partial<FilterState>
 
 export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
-    sources, types, secretTypes, stats, search, fetchStats,
+    sources, types, secretTypes, stats, applyFilters,
   } = usePastes()
 
   const [query, setQuery] = useState('')
@@ -19,73 +22,63 @@ export default function App() {
   const [activeSecretTypes, setActiveSecretTypes] = useState<string[]>([])
   const [hasSecrets, setHasSecrets] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
-  const initializedRef = useRef(false)
 
-  const doSearch = useCallback((
-    q?: string, src?: string, typ?: string, secTypes?: string[], hs?: boolean, pg?: number
-  ) => {
-    search(
-      q ?? query,
-      src ?? activeSource,
-      typ ?? activeType,
-      secTypes ?? activeSecretTypes,
-      hs ?? hasSecrets,
-      pg ?? page,
-    )
-    fetchStats({
-      q: q ?? query,
-      source: src ?? activeSource,
-      type: typ ?? activeType,
-      secretTypes: secTypes ?? activeSecretTypes,
-      hasSecrets: hs ?? hasSecrets,
+  const applyAll = useCallback((overrides: Overrides) => {
+    const filterChanged =
+      overrides.q !== undefined ||
+      overrides.source !== undefined ||
+      overrides.type !== undefined ||
+      overrides.secretTypes !== undefined ||
+      overrides.hasSecrets !== undefined
+
+    applyFilters({
+      q: overrides.q !== undefined ? overrides.q : query,
+      source: overrides.source !== undefined ? overrides.source : activeSource,
+      type: overrides.type !== undefined ? overrides.type : activeType,
+      secretTypes: overrides.secretTypes !== undefined ? overrides.secretTypes : activeSecretTypes,
+      hasSecrets: overrides.hasSecrets !== undefined ? overrides.hasSecrets : hasSecrets,
+      page: filterChanged ? 1 : (overrides.page ?? page),
     })
-  }, [search, fetchStats, query, activeSource, activeType, activeSecretTypes, hasSecrets, page])
-
-  useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true
-      doSearch()
-    }
-  }, [doSearch])
+  }, [applyFilters, query, activeSource, activeType, activeSecretTypes, hasSecrets, page])
 
   const handleSearch = useCallback((q: string) => {
     setQuery(q)
-    doSearch(q, undefined, undefined, undefined, undefined, 1)
-  }, [doSearch])
+    applyAll({ q })
+  }, [applyAll])
 
   const handleSourceChange = useCallback((s: string) => {
     setActiveSource(s)
-    doSearch(undefined, s, undefined, undefined, undefined, 1)
-  }, [doSearch])
+    applyAll({ source: s })
+  }, [applyAll])
 
   const handleTypeChange = useCallback((t: string) => {
     setActiveType(t)
-    doSearch(undefined, undefined, t, undefined, undefined, 1)
-  }, [doSearch])
+    applyAll({ type: t })
+  }, [applyAll])
 
   const handleSecretTypeToggle = useCallback((st: string) => {
     const next = activeSecretTypes.includes(st)
       ? activeSecretTypes.filter(x => x !== st)
       : [...activeSecretTypes, st]
     setActiveSecretTypes(next)
-    doSearch(undefined, undefined, undefined, next, undefined, 1)
-  }, [doSearch, activeSecretTypes])
+    applyAll({ secretTypes: next })
+  }, [applyAll, activeSecretTypes])
 
   const handleSecretTypeClear = useCallback(() => {
     setActiveSecretTypes([])
-    doSearch(undefined, undefined, undefined, [], undefined, 1)
-  }, [doSearch])
+    applyAll({ secretTypes: [] })
+  }, [applyAll])
 
   const handleHasSecretsToggle = useCallback(() => {
     const next = !hasSecrets
     setHasSecrets(next)
-    doSearch(undefined, undefined, undefined, undefined, next, 1)
-  }, [doSearch, hasSecrets])
+    applyAll({ hasSecrets: next })
+  }, [applyAll, hasSecrets])
 
   const handlePageChange = useCallback((p: number) => {
-    doSearch(undefined, undefined, undefined, undefined, undefined, p)
+    applyAll({ page: p })
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [doSearch])
+  }, [applyAll])
 
   return (
     <div className="min-h-screen bg-[#0d0d0d]">
