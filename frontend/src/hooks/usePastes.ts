@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 
 const API_BASE = '/api'
 
+export interface FilterState {
+  q?: string
+  source?: string
+  type?: string
+  secretTypes?: string[]
+  hasSecrets?: boolean
+  page?: number
+}
+
 interface SecretTypeCount { type: string; count: number }
 interface SourceCount { source: string; count: number }
 interface TypeCount { content_type: string; count: number }
@@ -15,6 +24,29 @@ interface PasteResult {
 }
 interface SearchResult { total: number; page: number; per_page: number; total_pages: number; results: PasteResult[] }
 
+function buildStatsUrl(state: FilterState): string {
+  const qp = new URLSearchParams()
+  if (state.q) qp.set('q', state.q)
+  if (state.source) qp.set('source', state.source)
+  if (state.type) qp.set('content_type', state.type)
+  if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
+  if (state.hasSecrets) qp.set('has_secrets', 'true')
+  const qs = qp.toString()
+  return qs ? `${API_BASE}/stats?${qs}` : `${API_BASE}/stats`
+}
+
+function buildPastesUrl(state: FilterState): string {
+  const qp = new URLSearchParams()
+  if (state.q) qp.set('q', state.q)
+  if (state.source) qp.set('source', state.source)
+  if (state.type) qp.set('content_type', state.type)
+  if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
+  if (state.hasSecrets) qp.set('has_secrets', 'true')
+  qp.set('page', String(state.page || 1))
+  qp.set('per_page', '50')
+  return `${API_BASE}/pastes?${qp}`
+}
+
 export function usePastes() {
   const [pastes, setPastes] = useState<PasteResult[]>([])
   const [total, setTotal] = useState(0)
@@ -27,36 +59,45 @@ export function usePastes() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const paramsRef = useRef({ q: '', source: '', type: '', secretTypes: [] as string[] })
+  const pastesReqId = useRef(0)
+  const statsReqId = useRef(0)
 
-  const fetchPastes = useCallback(async (params: {
-    q?: string; source?: string; type?: string; secretTypes?: string[]; hasSecrets?: boolean; page?: number
-  }) => {
+  const fetchPastes = useCallback(async (state: FilterState) => {
+    const reqId = ++pastesReqId.current
     setLoading(true)
     setError(null)
     try {
-      const qp = new URLSearchParams()
-      if (params.q) qp.set('q', params.q)
-      if (params.source) qp.set('source', params.source)
-      if (params.type) qp.set('content_type', params.type)
-      if (params.secretTypes) params.secretTypes.forEach(st => qp.append('secret_type', st))
-      if (params.hasSecrets) qp.set('has_secrets', 'true')
-      qp.set('page', String(params.page || 1))
-      qp.set('per_page', '50')
-
-      const res = await fetch(`${API_BASE}/pastes?${qp}`)
+      const res = await fetch(buildPastesUrl(state))
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: SearchResult = await res.json()
+      if (pastesReqId.current !== reqId) return
       setPastes(data.results)
       setTotal(data.total)
       setPage(data.page)
       setTotalPages(data.total_pages)
     } catch (e: unknown) {
+      if (pastesReqId.current !== reqId) return
       setError(e instanceof Error ? e.message : 'Failed to fetch pastes')
     } finally {
-      setLoading(false)
+      if (pastesReqId.current === reqId) setLoading(false)
     }
   }, [])
+
+  const fetchStats = useCallback(async (state?: FilterState) => {
+    const reqId = ++statsReqId.current
+    try {
+      const r = await fetch(buildStatsUrl(state || {}))
+      if (r.ok) {
+        const data = await r.json()
+        if (statsReqId.current === reqId) setStats(data)
+      }
+    } catch {}
+  }, [])
+
+  const applyFilters = useCallback((state: FilterState) => {
+    fetchPastes(state)
+    fetchStats(state)
+  }, [fetchPastes, fetchStats])
 
   const fetchSources = useCallback(async () => {
     try { const r = await fetch(`${API_BASE}/sources`); if (r.ok) setSources(await r.json()) } catch {}
@@ -67,47 +108,19 @@ export function usePastes() {
   const fetchSecretTypes = useCallback(async () => {
     try { const r = await fetch(`${API_BASE}/secret-types`); if (r.ok) setSecretTypes(await r.json()) } catch {}
   }, [])
-  const fetchStats = useCallback(async (params?: {
-    q?: string; source?: string; type?: string; secretTypes?: string[]; hasSecrets?: boolean
-  }) => {
-    try {
-      let url = `${API_BASE}/stats`
-      if (params) {
-        const qp = new URLSearchParams()
-        if (params.q) qp.set('q', params.q)
-        if (params.source) qp.set('source', params.source)
-        if (params.type) qp.set('content_type', params.type)
-        if (params.secretTypes) params.secretTypes.forEach(st => qp.append('secret_type', st))
-        if (params.hasSecrets) qp.set('has_secrets', 'true')
-        const qs = qp.toString()
-        if (qs) url += '?' + qs
-      }
-      const r = await fetch(url); if (r.ok) setStats(await r.json())
-    } catch {}
-  }, [])
 
   useEffect(() => {
     fetchSources()
     fetchTypes()
     fetchSecretTypes()
-    fetchStats()
     fetchPastes({ page: 1 })
-  }, [fetchPastes, fetchSources, fetchTypes, fetchSecretTypes, fetchStats])
-
-  const search = useCallback((
-    q: string, source?: string, type_?: string,
-    secretTypes?: string[], hasSecrets?: boolean, pg?: number
-  ) => {
-    paramsRef.current = {
-      q, source: source || '', type: type_ || '', secretTypes: secretTypes || []
-    }
-    fetchPastes({ q, source, type: type_, secretTypes, hasSecrets, page: pg || 1 })
-  }, [fetchPastes])
+    fetchStats({})
+  }, [fetchSources, fetchTypes, fetchSecretTypes, fetchPastes, fetchStats])
 
   return {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats,
-    search, fetchPastes, fetchSources, fetchTypes, fetchSecretTypes, fetchStats,
+    applyFilters, fetchStats, fetchSources, fetchTypes, fetchSecretTypes,
   }
 }
 

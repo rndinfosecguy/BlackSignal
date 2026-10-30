@@ -39,6 +39,13 @@ def set_cache(key, value):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+
+    def cache_cleaner():
+        while True:
+            time.sleep(300)
+            _cache.clear()
+
+    threading.Thread(target=cache_cleaner, daemon=True).start()
     threading.Thread(target=index_all_pastes, daemon=True).start()
     threading.Thread(target=backfill_snippets, daemon=True).start()
     start_scheduler(REINDEX_INTERVAL)
