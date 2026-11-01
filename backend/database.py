@@ -146,13 +146,6 @@ def upsert_paste(paste_id, filename, source, content, content_type, size,
         conn.commit()
 
 
-def backfill_snippets():
-    # All rows have snippet populated by upsert_paste(). Scanning for legacy
-    # rows triggers full table I/O which can hit kernel D-state stalls on
-    # overlay2 — skip entirely.
-    return 0
-
-
 def delete_paste(paste_id, commit=True):
     conn = get_conn()
     conn.execute("DELETE FROM pastes WHERE id = ?", (paste_id,))

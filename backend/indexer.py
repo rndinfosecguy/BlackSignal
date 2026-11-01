@@ -42,15 +42,9 @@ def detect_content_type(filepath: str, content: str) -> str:
         return "markdown"
     if content_stripped.startswith("<?php"):
         return "php"
-    if content_stripped.startswith("SELECT ") or content_stripped.startswith("select "):
-        return "sql"
-    if content_stripped.startswith("CREATE ") or content_stripped.startswith("ALTER "):
-        return "sql"
-    if content_stripped.startswith("INSERT ") or content_stripped.startswith("UPDATE "):
-        return "sql"
-    if content_stripped.startswith("DELETE ") or content_stripped.startswith("DROP "):
-        return "sql"
-    if content_stripped.startswith("PROCEDURE ") or content_stripped.startswith("FUNCTION "):
+    if any(content_stripped.upper().startswith(kw) for kw in
+           ("SELECT ", "CREATE ", "ALTER ", "INSERT ", "UPDATE ",
+            "DELETE ", "DROP ", "PROCEDURE ", "FUNCTION ")):
         return "sql"
 
     # Heuristic didn't match — fall back to python-magic for MIME detection

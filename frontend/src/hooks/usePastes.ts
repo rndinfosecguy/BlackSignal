@@ -24,29 +24,6 @@ interface PasteResult {
 }
 interface SearchResult { total: number; page: number; per_page: number; total_pages: number; results: PasteResult[] }
 
-function buildStatsUrl(state: FilterState): string {
-  const qp = new URLSearchParams()
-  if (state.q) qp.set('q', state.q)
-  if (state.source) qp.set('source', state.source)
-  if (state.type) qp.set('content_type', state.type)
-  if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
-  if (state.hasSecrets) qp.set('has_secrets', 'true')
-  const qs = qp.toString()
-  return qs ? `${API_BASE}/stats?${qs}` : `${API_BASE}/stats`
-}
-
-function buildPastesUrl(state: FilterState): string {
-  const qp = new URLSearchParams()
-  if (state.q) qp.set('q', state.q)
-  if (state.source) qp.set('source', state.source)
-  if (state.type) qp.set('content_type', state.type)
-  if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
-  if (state.hasSecrets) qp.set('has_secrets', 'true')
-  qp.set('page', String(state.page || 1))
-  qp.set('per_page', '50')
-  return `${API_BASE}/pastes?${qp}`
-}
-
 interface IndexStatus {
   running: boolean
   current: number
@@ -55,6 +32,26 @@ interface IndexStatus {
 }
 
 const defaultIndexStatus: IndexStatus = { running: false, current: 0, total: 0, phase: '' }
+
+function queryString(state: FilterState): string {
+  const qp = new URLSearchParams()
+  if (state.q) qp.set('q', state.q)
+  if (state.source) qp.set('source', state.source)
+  if (state.type) qp.set('content_type', state.type)
+  if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
+  if (state.hasSecrets) qp.set('has_secrets', 'true')
+  return qp.toString()
+}
+
+async function fetchJson<T>(path: string): Promise<T | null> {
+  try {
+    const r = await fetch(path)
+    if (!r.ok) return null
+    return await r.json() as T
+  } catch {
+    return null
+  }
+}
 
 export function usePastes() {
   const [pastes, setPastes] = useState<PasteResult[]>([])
@@ -77,8 +74,10 @@ export function usePastes() {
     const reqId = ++pastesReqId.current
     setLoading(true)
     setError(null)
+    const qs = queryString(state)
+    const url = `${API_BASE}/pastes?${qs}${qs ? '&' : ''}page=${state.page || 1}&per_page=50`
     try {
-      const res = await fetch(buildPastesUrl(state))
+      const res = await fetch(url)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: SearchResult = await res.json()
       if (pastesReqId.current !== reqId) return
@@ -96,13 +95,9 @@ export function usePastes() {
 
   const fetchStats = useCallback(async (state?: FilterState) => {
     const reqId = ++statsReqId.current
-    try {
-      const r = await fetch(buildStatsUrl(state || {}))
-      if (r.ok) {
-        const data = await r.json()
-        if (statsReqId.current === reqId) setStats(data)
-      }
-    } catch {}
+    const qs = state ? queryString(state) : ''
+    const data = await fetchJson<Stats>(`${API_BASE}/stats${qs ? `?${qs}` : ''}`)
+    if (data && statsReqId.current === reqId) setStats(data)
   }, [])
 
   const applyFilters = useCallback((state: FilterState) => {
@@ -111,43 +106,33 @@ export function usePastes() {
     fetchStats(state)
   }, [fetchPastes, fetchStats])
 
-  const fetchSources = useCallback(async () => {
-    try { const r = await fetch(`${API_BASE}/sources`); if (r.ok) setSources(await r.json()) } catch {}
-  }, [])
-  const fetchTypes = useCallback(async () => {
-    try { const r = await fetch(`${API_BASE}/types`); if (r.ok) setTypes(await r.json()) } catch {}
-  }, [])
-  const fetchSecretTypes = useCallback(async () => {
-    try { const r = await fetch(`${API_BASE}/secret-types`); if (r.ok) setSecretTypes(await r.json()) } catch {}
-  }, [])
-
-  // Poll index status every 60s; also fetch initial data once when idle
+  // Poll index status every 60s; fetch initial data once when the indexer is idle
   useEffect(() => {
     let cancelled = false
     let timeout: ReturnType<typeof setTimeout>
     let dataLoaded = false
 
     const poll = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/index-status`)
-        if (r.ok) {
-          const data: IndexStatus = await r.json()
+      const data = await fetchJson<IndexStatus>(`${API_BASE}/index-status`)
+      if (!cancelled && data) {
+        setIndexStatus(data)
+        runningRef.current = data.running
+        // Fetch initial data only once the indexer is idle
+        if (!data.running && !dataLoaded) {
+          dataLoaded = true
+          const [s, t, st] = await Promise.all([
+            fetchJson<SourceCount[]>(`${API_BASE}/sources`),
+            fetchJson<TypeCount[]>(`${API_BASE}/types`),
+            fetchJson<SecretTypeCount[]>(`${API_BASE}/secret-types`),
+          ])
           if (!cancelled) {
-            setIndexStatus(data)
-            runningRef.current = data.running
-            // Fetch initial data once when the indexer is idle
-            if (!data.running && !dataLoaded) {
-              dataLoaded = true
-              fetchSources()
-              fetchTypes()
-              fetchSecretTypes()
-              fetchPastes({ page: 1 })
-              fetchStats({})
-            }
+            if (s) setSources(s)
+            if (t) setTypes(t)
+            if (st) setSecretTypes(st)
+            fetchPastes({ page: 1 })
+            fetchStats({})
           }
         }
-      } catch {
-        /* ignore transient errors */
       }
       if (!cancelled) timeout = setTimeout(poll, 60000)
     }
@@ -158,19 +143,15 @@ export function usePastes() {
       cancelled = true
       if (timeout) clearTimeout(timeout)
     }
-  }, [fetchSources, fetchTypes, fetchSecretTypes, fetchPastes, fetchStats])
+  }, [fetchPastes, fetchStats])
 
   return {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus,
-    applyFilters, fetchStats, fetchSources, fetchTypes, fetchSecretTypes,
+    applyFilters,
   }
 }
 
 export async function fetchPasteDetail(id: string): Promise<PasteResult | null> {
-  try {
-    const res = await fetch(`${API_BASE}/pastes/${encodeURIComponent(id)}`)
-    if (!res.ok) return null
-    return await res.json()
-  } catch { return null }
+  return fetchJson<PasteResult>(`${API_BASE}/pastes/${encodeURIComponent(id)}`)
 }

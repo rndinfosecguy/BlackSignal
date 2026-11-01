@@ -1,8 +1,8 @@
 import os
-import time
 import logging
 import threading
 from contextlib import asynccontextmanager
+from functools import lru_cache
 
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,29 +20,55 @@ logger = logging.getLogger("blacksignal")
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 REINDEX_INTERVAL = int(os.environ.get("REINDEX_INTERVAL", "300"))
 
-_cache = {}
-_CACHE_TTL = 3600  # 1 hour; cache_cleaner removed — TTL and /api/reindex handle freshness
+
+def normalize_fts_query(q: str) -> str | None:
+    """Strip whitespace; wrap in FTS5 phrase quotes unless the query already
+    uses FTS5 operators (*, ", (, )). Returns None for empty input."""
+    query = q.strip()
+    if not query:
+        return None
+    if not any(c in query for c in ('*', '"', '(', ')')):
+        query = f'"{query}"'
+    return query
+
+
+# --- Cached data accessors -------------------------------------------------
+# Data only changes when the indexer runs (which calls clear_cache), so
+# lru_cache bounded by the number of distinct filter combinations is safe.
+
+@lru_cache(maxsize=256)
+def _get_stats_cached(query, source, content_type, has_secrets, secret_types):
+    conditions, params = build_filter_conditions(
+        query=query,
+        source=source,
+        content_type=content_type,
+        has_secrets=has_secrets,
+        secret_types=secret_types,
+    )
+    if conditions:
+        return get_stats_filtered(conditions, params)
+    return get_stats()
+
+
+@lru_cache(maxsize=1)
+def _get_sources_cached():
+    return get_sources()
+
+
+@lru_cache(maxsize=1)
+def _get_types_cached():
+    return get_content_types()
+
+
+@lru_cache(maxsize=1)
+def _get_secret_types_cached():
+    return get_secret_types()
 
 
 def clear_cache():
-    now = time.time()
-    expired = [k for k, v in list(_cache.items()) if now - v[0] >= _CACHE_TTL]
-    for k in expired:
-        del _cache[k]
-    if expired:
-        logger.info("Cache evicted %d stale entries", len(expired))
-
-
-def cached(key):
-    now = time.time()
-    entry = _cache.get(key)
-    if entry and now - entry[0] < _CACHE_TTL:
-        return entry[1]
-    return None
-
-
-def set_cache(key, value):
-    _cache[key] = (time.time(), value)
+    """Invalidate all cached API responses (called after re-indexing)."""
+    for fn in (_get_stats_cached, _get_sources_cached, _get_types_cached, _get_secret_types_cached):
+        fn.cache_clear()
 
 
 @asynccontextmanager
@@ -50,15 +76,8 @@ async def lifespan(app: FastAPI):
     init_db()
 
     # Pre-compute unfiltered stats so the first user never hits the cold path
-    stats_key = ("stats", None, None, None, None, ())
-    set_cache(stats_key, get_stats())
+    _get_stats_cached(None, None, None, None, ())
 
-    def cache_cleaner():
-        while True:
-            time.sleep(600)
-            clear_cache()
-
-    threading.Thread(target=cache_cleaner, daemon=True).start()
     threading.Thread(target=index_all_pastes, daemon=True).start()
     start_scheduler(REINDEX_INTERVAL)
     yield
@@ -83,55 +102,28 @@ def api_stats(
     has_secrets: bool = Query(None, description="Only pastes with secrets"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
 ):
-    query = q.strip() if q.strip() else None
-    if query and not any(c in query for c in ("*", "\"", "(", ")")):
-        query = f'"{query}"'
-
-    key = ("stats", query, source, content_type, has_secrets, tuple(secret_type))
-    result = cached(key)
-    if result is not None:
-        return result
-
-    conditions, params = build_filter_conditions(
-        query=query,
-        source=source,
-        content_type=content_type,
-        has_secrets=has_secrets,
-        secret_types=secret_type if secret_type else None,
+    return _get_stats_cached(
+        normalize_fts_query(q),
+        source,
+        content_type,
+        has_secrets,
+        tuple(secret_type),
     )
-    if conditions:
-        result = get_stats_filtered(conditions, params)
-    else:
-        result = get_stats()
-    set_cache(key, result)
-    return result
 
 
 @app.get("/api/sources")
 def api_sources():
-    result = cached("sources")
-    if result is None:
-        result = get_sources()
-        set_cache("sources", result)
-    return result
+    return _get_sources_cached()
 
 
 @app.get("/api/types")
 def api_types():
-    result = cached("types")
-    if result is None:
-        result = get_content_types()
-        set_cache("types", result)
-    return result
+    return _get_types_cached()
 
 
 @app.get("/api/secret-types")
 def api_secret_types():
-    result = cached("secret-types")
-    if result is None:
-        result = get_secret_types()
-        set_cache("secret-types", result)
-    return result
+    return _get_secret_types_cached()
 
 
 @app.get("/api/pastes")
@@ -144,11 +136,8 @@ def api_search(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
 ):
-    query = q.strip() if q.strip() else None
-    if query and not any(c in query for c in ("*", "\"", "(", ")")):
-        query = f'"{query}"'
     return search_pastes(
-        query=query,
+        query=normalize_fts_query(q),
         source=source,
         content_type=content_type,
         has_secrets=has_secrets,
@@ -173,11 +162,11 @@ def api_index_status():
 
 @app.post("/api/reindex")
 def api_reindex():
-    _cache.clear()
+    clear_cache()
     return index_all_pastes()
 
 
-SPA_HTML = os.path.join(STATIC_DIR, "index.html") if os.path.exists(os.path.join(STATIC_DIR, "index.html")) else None
+# --- SPA static serving -----------------------------------------------------
 
 if STATIC_DIR and os.path.exists(STATIC_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
@@ -189,8 +178,9 @@ if STATIC_DIR and os.path.exists(STATIC_DIR):
         filepath = os.path.join(STATIC_DIR, full_path)
         if os.path.exists(filepath) and os.path.isfile(filepath):
             return FileResponse(filepath)
-        if SPA_HTML:
-            return FileResponse(SPA_HTML)
+        spa_html = os.path.join(STATIC_DIR, "index.html")
+        if os.path.exists(spa_html):
+            return FileResponse(spa_html)
         raise HTTPException(status_code=404)
 
 

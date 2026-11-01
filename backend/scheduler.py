@@ -4,12 +4,10 @@ import threading
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from indexer import walk_pastes, detect_content_type
-from database import upsert_paste, get_indexed_ids, delete_paste, get_conn, backfill_snippets
+from database import upsert_paste, get_indexed_ids, delete_paste, get_conn
 from detector import scan_content
 
 logger = logging.getLogger("blacksignal")
-
-RAW_PASTES_DIR = os.environ.get("RAW_PASTES_DIR", "/app/raw_pastes")
 
 _index_lock = threading.Lock()
 
@@ -93,10 +91,6 @@ def index_all_pastes():
         get_conn().commit()
 
         _index_progress.update(phase="maintenance")
-
-        n = backfill_snippets()
-        if n:
-            logger.info("Backfilled %d snippets", n)
 
         if indexed_count > 0 or deleted_count > 0:
             # FTS automerge=1 handles segment merging; explicit 'optimize' can
