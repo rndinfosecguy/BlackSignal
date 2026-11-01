@@ -33,6 +33,50 @@ const TYPE_LANG_MAP: Record<string, string> = {
 
 const HIGHLIGHT_LIMIT = 100000
 
+/**
+ * Split highlighted HTML into per-line, tag-balanced chunks so each line can be
+ * rendered separately (for the gutter) without leaking open <span> tags across
+ * line boundaries.
+ */
+function splitHighlighted(html: string): string[] {
+  const lines: string[] = []
+  const stack: string[] = []      // currently open <span ...> opening strings
+  let buf = ''
+
+  const flush = () => {
+    // close all open spans for this line, then re-open for the next
+    lines.push(buf + stack.map(() => '</span>').join(''))
+    buf = stack.join('')
+  }
+
+  let i = 0
+  while (i < html.length) {
+    const ch = html[i]
+    if (ch === '<') {
+      const end = html.indexOf('>', i)
+      if (end === -1) break
+      const tag = html.slice(i, end + 1)
+      if (tag.startsWith('</span')) {
+        stack.pop()
+      } else if (tag.startsWith('<span')) {
+        stack.push(tag)
+      }
+      buf += tag
+      i = end + 1
+      continue
+    }
+    if (ch === '\n') {
+      flush()
+      i += 1
+      continue
+    }
+    buf += ch
+    i += 1
+  }
+  flush()
+  return lines
+}
+
 interface Secret { type: string; line: number; match: string }
 interface PasteDetailData {
   id: string; filename: string; source: string; content: string
@@ -76,6 +120,19 @@ export default function PasteDetail({ id, onClose }: Props) {
     }).catch(() => {})
   }
 
+  const handleDownload = () => {
+    if (!paste) return
+    const blob = new Blob([paste.content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${paste.source}_${paste.filename || paste.id}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const highlighted = useMemo(() => {
     if (!paste || !contentVisible) return ''
     const lang = TYPE_LANG_MAP[paste.content_type] || 'plaintext'
@@ -86,6 +143,11 @@ export default function PasteDetail({ id, onClose }: Props) {
       return esc(content)
     }
   }, [paste, contentVisible])
+
+  const highlightedLines = useMemo(
+    () => (highlighted ? splitHighlighted(highlighted) : []),
+    [highlighted],
+  )
 
   const isTruncated = paste ? paste.content.length > HIGHLIGHT_LIMIT : false
 
@@ -105,6 +167,10 @@ export default function PasteDetail({ id, onClose }: Props) {
             <button onClick={handleCopy}
               className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all">
               {copied ? 'Copied' : 'Copy'}
+            </button>
+            <button onClick={handleDownload}
+              className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all">
+              Download
             </button>
             <button onClick={onClose} className="text-[#666666] hover:text-[#ff004d] text-lg transition-all leading-none">&times;</button>
           </div>
@@ -153,9 +219,25 @@ export default function PasteDetail({ id, onClose }: Props) {
               {contentVisible && (
                 <>
                   {isTruncated && <div className="text-[10px] text-[#555555] mb-2">Content truncated to {Math.round(HIGHLIGHT_LIMIT / 1000)}KB</div>}
-                  <pre className="text-sm leading-relaxed whitespace-pre-wrap break-all" style={{ fontFamily: 'var(--font-mono)' }}>
-                    <code className="hljs" dangerouslySetInnerHTML={{ __html: highlighted }} />
-                  </pre>
+                  <div className="flex">
+                    <div
+                      className="shrink-0 select-none text-right pr-3 mr-3 border-r border-[#222222] text-[#555555]"
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7 }}
+                    >
+                      {highlightedLines.map((_, i) => (
+                        <div key={i}>{i + 1}</div>
+                      ))}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {highlightedLines.map((lineHtml, i) => (
+                        <code
+                          key={i}
+                          className="hljs block whitespace-pre-wrap break-all"
+                          dangerouslySetInnerHTML={{ __html: lineHtml }}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
             </div>
