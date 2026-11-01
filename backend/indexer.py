@@ -1,4 +1,5 @@
 import os
+import stat
 import mimetypes
 import magic
 
@@ -52,6 +53,7 @@ def detect_content_type(filepath: str, content: str) -> str:
     if content_stripped.startswith("PROCEDURE ") or content_stripped.startswith("FUNCTION "):
         return "sql"
 
+    # Heuristic didn't match — fall back to python-magic for MIME detection
     try:
         mime = magic.from_file(filepath, mime=True)
         if mime.startswith("text/"):
@@ -78,16 +80,24 @@ def walk_pastes():
         source_path = os.path.join(RAW_PASTES_DIR, source_dir)
         if not os.path.isdir(source_path):
             continue
-        for fname in os.listdir(source_path):
+        try:
+            names = os.listdir(source_path)
+        except OSError:
+            continue
+        for fname in names:
             fpath = os.path.join(source_path, fname)
-            if os.path.isfile(fpath):
-                stat = os.stat(fpath)
-                files.append({
-                    "id": fname,
-                    "filename": fname,
-                    "source": source_dir,
-                    "path": fpath,
-                    "size": stat.st_size,
-                    "modified_at": str(stat.st_mtime),
-                })
+            try:
+                st = os.stat(fpath)
+            except OSError:
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                continue
+            files.append({
+                "id": fname,
+                "filename": fname,
+                "source": source_dir,
+                "path": fpath,
+                "size": st.st_size,
+                "modified_at": str(st.st_mtime),
+            })
     return files

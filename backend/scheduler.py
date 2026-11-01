@@ -4,7 +4,7 @@ import threading
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from indexer import walk_pastes, detect_content_type
-from database import upsert_paste, get_indexed_ids, delete_paste, get_conn
+from database import upsert_paste, get_indexed_ids, delete_paste, get_conn, backfill_snippets
 from detector import scan_content
 
 logger = logging.getLogger("blacksignal")
@@ -27,15 +27,18 @@ def index_all_pastes():
         deleted_count = 0
         total_files = len(files)
 
-        logger.info("Starting full index: %d files to process", total_files)
+        logger.info("Scanning %d files (%d new)", total_files, len(files) - len(indexed_ids))
+
+        LOG_INTERVAL = max(1, total_files // 50)
 
         for idx, f in enumerate(files, 1):
             current_ids.add(f["id"])
+
+            if idx % LOG_INTERVAL == 0:
+                logger.info("Progress: %d/%d (%.0f%%)", idx, total_files, 100.0 * idx / total_files)
+
             if f["id"] in indexed_ids:
                 continue
-
-            if idx % 100 == 0:
-                logger.info("Index progress: %d/%d (%.0f%%)", idx, total_files, 100.0 * idx / total_files)
 
             try:
                 with open(f["path"], "r", errors="replace") as fh:
@@ -65,7 +68,7 @@ def index_all_pastes():
                 if indexed_count % 100 == 0:
                     get_conn().commit()
             except Exception as e:
-                logger.warning("Failed to index %s: %s", f["path"], e)
+                logger.warning("Failed to process %s: %s", f["path"], e)
 
         get_conn().commit()
 
@@ -74,16 +77,46 @@ def index_all_pastes():
             deleted_count += 1
         get_conn().commit()
 
-        logger.info("Index complete: %d new, %d deleted, %d total",
+        n = backfill_snippets()
+        if n:
+            logger.info("Backfilled %d snippets", n)
+
+        if indexed_count > 0 or deleted_count > 0:
+            # FTS optimize + WAL checkpoint only when data changed
+            try:
+                conn = get_conn()
+                conn.execute("INSERT INTO pastes_fts(pastes_fts) VALUES('optimize')")
+                conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+            except Exception:
+                logger.exception("FTS optimize / WAL checkpoint failed")
+
+            try:
+                from main import clear_cache
+                clear_cache()
+            except ImportError:
+                pass
+
+        logger.info("Complete: %d new, %d deleted, %d total",
                     indexed_count, deleted_count, len(current_ids))
+
         return {"indexed": indexed_count, "deleted": deleted_count, "total": len(current_ids)}
     except Exception:
-        logger.exception("Indexing failed with unexpected error")
+        logger.exception("Indexing failed")
     finally:
         _index_lock.release()
 
 
 scheduler = AsyncIOScheduler()
+
+
+def run_maintenance():
+    try:
+        conn = get_conn()
+        conn.execute("INSERT INTO pastes_fts(pastes_fts) VALUES('optimize')")
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        conn.commit()
+    except Exception:
+        pass
 
 
 def start_scheduler(interval_seconds=300):

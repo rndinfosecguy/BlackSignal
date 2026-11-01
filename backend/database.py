@@ -81,6 +81,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_pastes_source ON pastes(source);
         CREATE INDEX IF NOT EXISTS idx_pastes_content_type ON pastes(content_type);
         CREATE INDEX IF NOT EXISTS idx_pastes_has_secrets ON pastes(has_secrets);
+        CREATE INDEX IF NOT EXISTS idx_pastes_has_passwords ON pastes(has_passwords);
         CREATE INDEX IF NOT EXISTS idx_pastes_secret_types ON pastes(secret_types);
         CREATE INDEX IF NOT EXISTS idx_pastes_first_seen ON pastes(first_seen DESC);
         CREATE INDEX IF NOT EXISTS idx_pastes_has_first ON pastes(has_secrets, first_seen DESC);
@@ -95,6 +96,11 @@ def init_db():
     try:
         conn.execute("ALTER TABLE pastes ADD COLUMN snippet TEXT NOT NULL DEFAULT ''")
         conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("INSERT INTO pastes_fts(pastes_fts) VALUES('automerge=1')")
     except sqlite3.OperationalError:
         pass
 

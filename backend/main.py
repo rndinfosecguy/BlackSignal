@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, get_paste_by_id, get_sources, \
-    get_content_types, get_secret_types, get_stats, get_stats_filtered, backfill_snippets
+    get_content_types, get_secret_types, get_stats, get_stats_filtered
 from scheduler import index_all_pastes, start_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -21,7 +21,16 @@ STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 REINDEX_INTERVAL = int(os.environ.get("REINDEX_INTERVAL", "300"))
 
 _cache = {}
-_CACHE_TTL = 60
+_CACHE_TTL = 3600  # 1 hour; cache_cleaner removed — TTL and /api/reindex handle freshness
+
+
+def clear_cache():
+    now = time.time()
+    expired = [k for k, v in list(_cache.items()) if now - v[0] >= _CACHE_TTL]
+    for k in expired:
+        del _cache[k]
+    if expired:
+        logger.info("Cache evicted %d stale entries", len(expired))
 
 
 def cached(key):
@@ -40,14 +49,17 @@ def set_cache(key, value):
 async def lifespan(app: FastAPI):
     init_db()
 
+    # Pre-compute unfiltered stats so the first user never hits the cold path
+    stats_key = ("stats", None, None, None, None, ())
+    set_cache(stats_key, get_stats())
+
     def cache_cleaner():
         while True:
-            time.sleep(300)
-            _cache.clear()
+            time.sleep(600)
+            clear_cache()
 
     threading.Thread(target=cache_cleaner, daemon=True).start()
     threading.Thread(target=index_all_pastes, daemon=True).start()
-    threading.Thread(target=backfill_snippets, daemon=True).start()
     start_scheduler(REINDEX_INTERVAL)
     yield
 
