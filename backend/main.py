@@ -12,7 +12,7 @@ import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, get_paste_by_id, get_sources, \
     get_content_types, get_secret_types, get_stats, get_stats_filtered
-from scheduler import index_all_pastes, start_scheduler
+from scheduler import index_all_pastes, start_scheduler, get_index_progress
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("blacksignal")
@@ -164,6 +164,11 @@ def api_paste_detail(paste_id: str):
     if not paste:
         raise HTTPException(status_code=404, detail="Paste not found")
     return paste
+
+
+@app.get("/api/index-status")
+def api_index_status():
+    return get_index_progress()
 
 
 @app.post("/api/reindex")

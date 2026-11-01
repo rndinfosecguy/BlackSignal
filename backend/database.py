@@ -147,21 +147,10 @@ def upsert_paste(paste_id, filename, source, content, content_type, size,
 
 
 def backfill_snippets():
-    conn = get_conn()
-    total = 0
-    while True:
-        ids = [r[0] for r in conn.execute(
-            "SELECT id FROM pastes WHERE snippet = '' OR snippet IS NULL LIMIT 500"
-        ).fetchall()]
-        if not ids:
-            break
-        conn.executemany(
-            "UPDATE pastes SET snippet = substr(content, 1, 200) WHERE id = ?",
-            [(i,) for i in ids]
-        )
-        conn.commit()
-        total += len(ids)
-    return total
+    # All rows have snippet populated by upsert_paste(). Scanning for legacy
+    # rows triggers full table I/O which can hit kernel D-state stalls on
+    # overlay2 — skip entirely.
+    return 0
 
 
 def delete_paste(paste_id, commit=True):

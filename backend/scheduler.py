@@ -13,6 +13,17 @@ RAW_PASTES_DIR = os.environ.get("RAW_PASTES_DIR", "/app/raw_pastes")
 
 _index_lock = threading.Lock()
 
+_index_progress = {
+    "running": False,
+    "current": 0,
+    "total": 0,
+    "phase": "",
+}
+
+
+def get_index_progress():
+    return dict(_index_progress)
+
 
 def index_all_pastes():
     if not _index_lock.acquire(blocking=False):
@@ -20,6 +31,7 @@ def index_all_pastes():
         return
 
     try:
+        _index_progress.update(running=True, current=0, total=0, phase="scanning")
         files = walk_pastes()
         indexed_ids = get_indexed_ids()
         current_ids = set()
@@ -27,14 +39,17 @@ def index_all_pastes():
         deleted_count = 0
         total_files = len(files)
 
+        _index_progress.update(current=0, total=total_files, phase="indexing")
+
         logger.info("Scanning %d files (%d new)", total_files, len(files) - len(indexed_ids))
 
-        LOG_INTERVAL = max(1, total_files // 50)
+        LOG_INTERVAL = max(1, total_files // 100)
 
         for idx, f in enumerate(files, 1):
             current_ids.add(f["id"])
 
             if idx % LOG_INTERVAL == 0:
+                _index_progress.update(current=idx, phase="indexing")
                 logger.info("Progress: %d/%d (%.0f%%)", idx, total_files, 100.0 * idx / total_files)
 
             if f["id"] in indexed_ids:
@@ -77,19 +92,15 @@ def index_all_pastes():
             deleted_count += 1
         get_conn().commit()
 
+        _index_progress.update(phase="maintenance")
+
         n = backfill_snippets()
         if n:
             logger.info("Backfilled %d snippets", n)
 
         if indexed_count > 0 or deleted_count > 0:
-            # FTS optimize + WAL checkpoint only when data changed
-            try:
-                conn = get_conn()
-                conn.execute("INSERT INTO pastes_fts(pastes_fts) VALUES('optimize')")
-                conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
-            except Exception:
-                logger.exception("FTS optimize / WAL checkpoint failed")
-
+            # FTS automerge=1 handles segment merging; explicit 'optimize' can
+            # hang for a long time on large tables (EBS/overlay2 I/O stalls).
             try:
                 from main import clear_cache
                 clear_cache()
@@ -103,20 +114,11 @@ def index_all_pastes():
     except Exception:
         logger.exception("Indexing failed")
     finally:
+        _index_progress.update(running=False, current=0, total=0, phase="")
         _index_lock.release()
 
 
 scheduler = AsyncIOScheduler()
-
-
-def run_maintenance():
-    try:
-        conn = get_conn()
-        conn.execute("INSERT INTO pastes_fts(pastes_fts) VALUES('optimize')")
-        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
-        conn.commit()
-    except Exception:
-        pass
 
 
 def start_scheduler(interval_seconds=300):

@@ -47,6 +47,15 @@ function buildPastesUrl(state: FilterState): string {
   return `${API_BASE}/pastes?${qp}`
 }
 
+interface IndexStatus {
+  running: boolean
+  current: number
+  total: number
+  phase: string
+}
+
+const defaultIndexStatus: IndexStatus = { running: false, current: 0, total: 0, phase: '' }
+
 export function usePastes() {
   const [pastes, setPastes] = useState<PasteResult[]>([])
   const [total, setTotal] = useState(0)
@@ -58,9 +67,11 @@ export function usePastes() {
   const [secretTypes, setSecretTypes] = useState<SecretTypeCount[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [indexStatus, setIndexStatus] = useState<IndexStatus>(defaultIndexStatus)
 
   const pastesReqId = useRef(0)
   const statsReqId = useRef(0)
+  const runningRef = useRef(false)
 
   const fetchPastes = useCallback(async (state: FilterState) => {
     const reqId = ++pastesReqId.current
@@ -95,6 +106,7 @@ export function usePastes() {
   }, [])
 
   const applyFilters = useCallback((state: FilterState) => {
+    if (runningRef.current) return
     fetchPastes(state)
     fetchStats(state)
   }, [fetchPastes, fetchStats])
@@ -109,17 +121,48 @@ export function usePastes() {
     try { const r = await fetch(`${API_BASE}/secret-types`); if (r.ok) setSecretTypes(await r.json()) } catch {}
   }, [])
 
+  // Poll index status every 60s; also fetch initial data once when idle
   useEffect(() => {
-    fetchSources()
-    fetchTypes()
-    fetchSecretTypes()
-    fetchPastes({ page: 1 })
-    fetchStats({})
+    let cancelled = false
+    let timeout: ReturnType<typeof setTimeout>
+    let dataLoaded = false
+
+    const poll = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/index-status`)
+        if (r.ok) {
+          const data: IndexStatus = await r.json()
+          if (!cancelled) {
+            setIndexStatus(data)
+            runningRef.current = data.running
+            // Fetch initial data once when the indexer is idle
+            if (!data.running && !dataLoaded) {
+              dataLoaded = true
+              fetchSources()
+              fetchTypes()
+              fetchSecretTypes()
+              fetchPastes({ page: 1 })
+              fetchStats({})
+            }
+          }
+        }
+      } catch {
+        /* ignore transient errors */
+      }
+      if (!cancelled) timeout = setTimeout(poll, 60000)
+    }
+
+    poll()
+
+    return () => {
+      cancelled = true
+      if (timeout) clearTimeout(timeout)
+    }
   }, [fetchSources, fetchTypes, fetchSecretTypes, fetchPastes, fetchStats])
 
   return {
     pastes, total, page, totalPages, loading, error,
-    sources, types, secretTypes, stats,
+    sources, types, secretTypes, stats, indexStatus,
     applyFilters, fetchStats, fetchSources, fetchTypes, fetchSecretTypes,
   }
 }

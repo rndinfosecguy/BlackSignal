@@ -13,7 +13,7 @@ type Overrides = Partial<FilterState>
 export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
-    sources, types, secretTypes, stats, applyFilters,
+    sources, types, secretTypes, stats, indexStatus, applyFilters,
   } = usePastes()
 
   const [query, setQuery] = useState('')
@@ -80,61 +80,95 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [applyAll])
 
+  const indexing = indexStatus.running
+
+  const progressPct = indexStatus.total > 0
+    ? Math.round((indexStatus.current / indexStatus.total) * 100)
+    : 0
+
   return (
     <div className="min-h-screen bg-[#0d0d0d]">
-      <div className="max-w-5xl mx-auto px-6 py-6">
-        <header className="mb-6">
-          <div className="flex items-center gap-6">
-            <img src="/bs_logo.png" alt="BlackSignal" className="h-16 shrink-0" />
-            <StatsDashboard stats={stats} />
-          </div>
-        </header>
-
-        <div className="mb-6 space-y-4">
-          <SearchBar onSearch={handleSearch} loading={loading} />
-          <FilterChips
-            sources={sources}
-            types={types}
-            secretTypes={secretTypes}
-            activeSource={activeSource}
-            activeType={activeType}
-            activeSecretTypes={activeSecretTypes}
-            hasSecrets={hasSecrets}
-            onSourceChange={handleSourceChange}
-            onTypeChange={handleTypeChange}
-            onSecretTypeToggle={handleSecretTypeToggle}
-            onSecretTypeClear={handleSecretTypeClear}
-            onHasSecretsToggle={handleHasSecretsToggle}
-          />
-        </div>
-
-        <div className="space-y-3">
-          {loading && pastes.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-[#555555]">Loading pastes...</div>
-          ) : error ? (
-            <div className="flex items-center justify-center h-32"><span className="text-[#ff004d]">Error: {error}</span></div>
-          ) : pastes.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-[#555555]">No results found</div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {pastes.map(p => <PasteCard key={p.id} {...p} onClick={setDetailId} />)}
+      {indexing ? (
+        /* Full-screen indexing overlay whenever the indexer is active */
+        <div className="min-h-screen flex flex-col items-center justify-center px-6">
+          <img src="/bs_logo.png" alt="BlackSignal" className="h-24 mb-8 opacity-60" />
+          <div className="w-full max-w-md">
+            <div className="flex justify-between text-[13px] text-[#555555] mb-2">
+              <span>Indexing pastes...</span>
+              <span>
+                {indexStatus.current > 0
+                  ? `${indexStatus.current.toLocaleString()} / ${indexStatus.total.toLocaleString()} (${progressPct}%)`
+                  : indexStatus.total > 0
+                    ? `0 / ${indexStatus.total.toLocaleString()} (0%)`
+                    : 'Scanning files...'}
+              </span>
             </div>
-          )}
+            <div className="w-full h-2 bg-[#1a1a1a] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#ff004d] rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${indexStatus.total > 0 ? progressPct : 5}%` }}
+              />
+            </div>
+            <p className="text-[12px] text-[#444444] text-center mt-3">
+              Indexing in progress — the UI will appear automatically when ready
+            </p>
+          </div>
         </div>
+      ) : (
+        <div className="max-w-5xl mx-auto px-6 py-6">
+          <header className="mb-6">
+            <div className="flex items-center gap-6">
+              <img src="/bs_logo.png" alt="BlackSignal" className="h-16 shrink-0" />
+              <StatsDashboard stats={stats} />
+            </div>
+          </header>
 
-        <Pagination page={page} totalPages={totalPages} total={total} onChange={handlePageChange} />
+          <div className="mb-6 space-y-4">
+            <SearchBar onSearch={handleSearch} loading={loading} />
+            <FilterChips
+              sources={sources}
+              types={types}
+              secretTypes={secretTypes}
+              activeSource={activeSource}
+              activeType={activeType}
+              activeSecretTypes={activeSecretTypes}
+              hasSecrets={hasSecrets}
+              onSourceChange={handleSourceChange}
+              onTypeChange={handleTypeChange}
+              onSecretTypeToggle={handleSecretTypeToggle}
+              onSecretTypeClear={handleSecretTypeClear}
+              onHasSecretsToggle={handleHasSecretsToggle}
+            />
+          </div>
 
-        <footer className="mt-10 pt-5 border-t border-[#1a1a1a] flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 text-[12px] text-[#444444]">
-            <span>BlackSignal &middot; Paste Intelligence System</span>
-            <span className="text-[#555555]">|</span>
-            <span className="text-[#555555]">FOR RESEARCH ONLY</span>
+          <div className="space-y-3">
+            {loading && pastes.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-[#555555]">Loading pastes...</div>
+            ) : error ? (
+              <div className="flex items-center justify-center h-32"><span className="text-[#ff004d]">Error: {error}</span></div>
+            ) : pastes.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-[#555555]">No results found</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {pastes.map(p => <PasteCard key={p.id} {...p} onClick={setDetailId} />)}
+              </div>
+            )}
           </div>
-          <div className="text-[12px] text-[#444444]">
-            {stats ? `${stats.total.toLocaleString()} pastes indexed` : ''}
-          </div>
-        </footer>
-      </div>
+
+          <Pagination page={page} totalPages={totalPages} total={total} onChange={handlePageChange} />
+
+          <footer className="mt-10 pt-5 border-t border-[#1a1a1a] flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-[12px] text-[#444444]">
+              <span>BlackSignal &middot; Paste Intelligence System</span>
+              <span className="text-[#555555]">|</span>
+              <span className="text-[#555555]">FOR RESEARCH ONLY</span>
+            </div>
+            <div className="text-[12px] text-[#444444]">
+              {stats ? `${stats.total.toLocaleString()} pastes indexed` : ''}
+            </div>
+          </footer>
+        </div>
+      )}
 
       {detailId && <PasteDetail id={detailId} onClose={() => setDetailId(null)} />}
     </div>
