@@ -98,7 +98,7 @@ File id = filename. Content type is detected automatically
 docker compose up -d --build
 ```
 
-> Default port is `80´´9090`. Edit in `docker-compose.yml`.
+> Default port is `9090`. Edit in `docker-compose.yml`.
 
 On first boot the app indexes every paste file in `raw_pastes/` and prints generated credentials. During indexing the web UI shows a progress bar with file count; once complete it automatically switches to the normal interface.
 
