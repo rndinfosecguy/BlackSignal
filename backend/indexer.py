@@ -47,9 +47,10 @@ def detect_content_type(filepath: str, content: str) -> str:
             "DELETE ", "DROP ", "PROCEDURE ", "FUNCTION ")):
         return "sql"
 
-    # Heuristic didn't match — fall back to python-magic for MIME detection
+    # Heuristic didn't match — fall back to python-magic on the in-memory
+    # content rather than re-opening the file (avoids an extra D-state window).
     try:
-        mime = magic.from_file(filepath, mime=True)
+        mime = magic.from_buffer(content, mime=True)
         if mime.startswith("text/"):
             subtype = mime.split("/")[1]
             return subtype if subtype != "plain" else "text"
@@ -75,23 +76,16 @@ def walk_pastes():
         if not os.path.isdir(source_path):
             continue
         try:
-            names = os.listdir(source_path)
+            for entry in os.scandir(source_path):
+                if entry.is_file(follow_symlinks=False):
+                    files.append({
+                        "id": entry.name,
+                        "filename": entry.name,
+                        "source": source_dir,
+                        "path": entry.path,
+                        "size": entry.stat().st_size,
+                        "modified_at": str(entry.stat().st_mtime),
+                    })
         except OSError:
             continue
-        for fname in names:
-            fpath = os.path.join(source_path, fname)
-            try:
-                st = os.stat(fpath)
-            except OSError:
-                continue
-            if not stat.S_ISREG(st.st_mode):
-                continue
-            files.append({
-                "id": fname,
-                "filename": fname,
-                "source": source_dir,
-                "path": fpath,
-                "size": st.st_size,
-                "modified_at": str(st.st_mtime),
-            })
     return files
