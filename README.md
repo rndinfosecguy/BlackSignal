@@ -106,7 +106,7 @@ On first boot the app indexes every paste file in `raw_pastes/` and prints gener
 ┌──────────────────────────────────────┐
 │     BlackSignal Web App Credentials  │
 │                                      │
-│  URL:     http://localhost           │
+│  URL:     http://localhost:9090      │
 │  Username: admin                     │
 │  Password: <random>                  │
 └──────────────────────────────────────┘
