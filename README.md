@@ -17,7 +17,6 @@ Best used in combination with my other project [rndinfosecguy/Scavenger](https:/
 - **Sensitive-data detection** — automatic regex/keyword scanning for:
   `email:password`, `private_key`, `aws_key`, `github_token`, `stripe_key`, `google_api_key`, `jwt_token`, `slack_token`, `discord_token`, `connection_string`, `onion_address`, `auth_header`, `credit_card`, `heroku_api_key` + custom search terms
 - **Secret-first detail view** — detected secrets are shown at the top of a paste, with the full content collapsed by default
-- **Live stats** — paste/secrets/passwords/source counts update with every applied filter (`filtered / total`)
 - **Syntax highlighting** — highlight.js for different coding languages
 - **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
 - **Periodic re-indexing** — automatic daily scan for new/changed pastes
@@ -57,13 +56,18 @@ Best used in combination with my other project [rndinfosecguy/Scavenger](https:/
 ```
 BlackSignal/
 ├── backend/
-│   ├── main.py          # FastAPI app + routes + response cache
-│   ├── database.py      # SQLite/FTS5 schema, queries, smart indexing
+│   ├── main.py          # FastAPI app + routes + lru_cache response caching
+│   ├── database.py      # SQLite/FTS5 schema, queries, indexed access
 │   ├── indexer.py       # Walk raw_pastes/, detect content types
 │   ├── detector.py      # Sensitive-data regex/keyword patterns
-│   ├── scheduler.py     # Periodic re-indexing (APScheduler)
+│   ├── scheduler.py     # Periodic re-indexing (APScheduler), threaded pipeline
 │   └── searchterms.txt  # Custom search terms (Scavenger-style)
-├── frontend/            # React + Vite SPA (Tailwind dark theme)
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx          # Main UI (filter state, indexing overlay)
+│   │   ├── hooks/           # usePastes — data fetching, index-status polling
+|   │   ├── components/      # PasteCard, PasteDetail, FilterChips, SearchBar, …
+│   │   └── styles/          # Tailwind v4 + dark hacker theme
 │   └── public/bs_logo.png
 ├── nginx/default.conf   # Reverse proxy + htpasswd + gzip
 ├── docker-entrypoint.sh # Generates auth creds, starts nginx + backend
@@ -80,9 +84,9 @@ Place pastes into `raw_pastes/`, one subfolder per source site (name = source):
 Example
 ```
 raw_pastes/
-├── pastebin/     # e.g. cqskzExJ, dPrBMqLK
-├── github/       # e.g. 00001e74d238ae5911ccfc8f8d4864ae
-├── dpaste/       # e.g. 72R7RJMZL
+├── pastebin/
+├── github/
+├── dpaste/
 └── pastesio/
 ```
 
@@ -94,9 +98,9 @@ File id = filename. Content type is detected automatically
 docker compose up -d --build
 ```
 
-> If port `80` is taken locally, change the mapping in `docker-compose.yml`, e.g. `9090:80`.
+> Default port is `80´´9090`. Edit in `docker-compose.yml`.
 
-On first boot the app prints generated credentials and starts the initial index:
+On first boot the app indexes every paste file in `raw_pastes/` and prints generated credentials. During indexing the web UI shows a progress bar with file count; once complete it automatically switches to the normal interface.
 
 ```
 ┌──────────────────────────────────────┐
@@ -108,7 +112,7 @@ On first boot the app prints generated credentials and starts the initial index:
 └──────────────────────────────────────┘
 ```
 
-The credentials are persisted in the mounted `./data` volume. To set a fixed password, add:
+The credentials are persisted in the mounted `./data` volume. To set a fixed password in the docker compose file, add:
 
 ```yaml
 environment:
@@ -117,7 +121,7 @@ environment:
 
 ### 3. Open
 
-Visit `http://localhost`
+Visit `http://localhost:9090`
 
 ## API Documentation
 
@@ -129,13 +133,14 @@ Visit `http://localhost`
 | GET | `/api/sources` | Source distribution |
 | GET | `/api/types` | Content-type distribution |
 | GET | `/api/secret-types` | Detected secret categories with counts |
+| GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
 | POST | `/api/reindex` | Trigger a manual re-index |
 
 Example:
 
 ```bash
 curl -u admin:PASSWORD \
-  "http://localhost/api/pastes?q=apikey&has_secrets=true&secret_type=aws_key&per_page=50"
+  "http://localhost:9090/api/pastes?q=apikey&has_secrets=true&secret_type=aws_key&per_page=50"
 ```
 
 ## Disclaimer
