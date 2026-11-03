@@ -12,6 +12,8 @@ Best used in combination with my other project [rndinfosecguy/Scavenger](https:/
 
 ## Features
 
+![image](assets/example.jpg)
+
 - **Search & browse** — full-text search (SQLite FTS5) across pastes with pagination
 - **Filtering** — by source site, detected content type, and specific sensitive-data categories
 - **Sensitive-data detection** — automatic regex/keyword scanning for:
@@ -20,8 +22,6 @@ Best used in combination with my other project [rndinfosecguy/Scavenger](https:/
 - **Syntax highlighting** — highlight.js for different coding languages
 - **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
 - **Periodic re-indexing** — automatic daily scan for new/changed pastes
-
-![image](assets/example.jpg)
 
 ## Tech Stack
 
