@@ -2,9 +2,9 @@
 
 ![image](assets/bs_logo.png)
 
-A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
+A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
 
-Best used in combination with my other project [rndinfosecguy/Scavenger](https://github.com/rndinfosecguy/Scavenger).
+Best used in combination with my paste scraper project [rndinfosecguy/Scavenger](https://github.com/rndinfosecguy/Scavenger).
 
 > **FOR RESEARCH ONLY.** This tool is intended for researchers and defenders to detect exposed secrets on public paste sites before attackers exploit them. Do not host or distribute breach data.
 
@@ -92,8 +92,6 @@ raw_pastes/
 └── pastesio/
 ```
 
-File id = filename. Content type is detected automatically 
-
 ### 2. Run
 
 ```bash
@@ -114,7 +112,7 @@ On first boot the app indexes every paste file in `raw_pastes/` and prints gener
 └──────────────────────────────────────┘
 ```
 
-The credentials are persisted in the mounted `./data` volume. To set a fixed password in the docker compose file, add:
+The credentials are persisted in the folder `data`. To set a fixed password in the docker compose file, add:
 
 ```yaml
 environment:
