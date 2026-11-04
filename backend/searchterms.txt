@@ -6,9 +6,6 @@ mysqli_connect(
 BEGIN RSA PRIVATE KEY
 -----BEGIN
 wp-config.php
-Return-Path:
-insert into
-INSERT INTO
 .onion
 github_pat_
 sk_live_
@@ -24,9 +21,3 @@ authorization: basic
 authorization: bearer
 api_key
 api_secret
-secret_key
-password =
-passwd =
-pwd =
-db_password
-db_username
