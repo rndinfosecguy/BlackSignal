@@ -63,7 +63,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSource,
           <Chip label="Secrets only" active={hasSecrets}
             activeStyle="border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5"
             onClick={onHasSecretsToggle} />
-          <Chip label="All types" active={activeSecretTypes.length === 0 && !hasSecrets} onClick={onSecretTypeClear} />
+          <Chip label="All types" active={activeSecretTypes.length === 0} onClick={onSecretTypeClear} />
           {secretTypes.map(st => (
             <Chip key={st.type} label={st.type} count={st.count}
               active={activeSecretTypes.includes(st.type)}
