@@ -149,6 +149,14 @@ export default function PasteDetail({ id, onClose }: Props) {
     [highlighted],
   )
 
+  // Gutter line count — computed from raw content (same as scanner's split("\n"))
+  // so line numbers always match regardless of highlight.js output quirks.
+  const totalLines = useMemo(() => {
+    if (!paste || !contentVisible) return 0
+    const c = paste.content.length > HIGHLIGHT_LIMIT ? paste.content.slice(0, HIGHLIGHT_LIMIT) : paste.content
+    return c.split('\n').length
+  }, [paste, contentVisible])
+
   const isTruncated = paste ? paste.content.length > HIGHLIGHT_LIMIT : false
 
   return (
@@ -224,16 +232,16 @@ export default function PasteDetail({ id, onClose }: Props) {
                       className="shrink-0 select-none text-right pr-3 mr-3 border-r border-[#222222] text-[#555555]"
                       style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7 }}
                     >
-                      {highlightedLines.map((_, i) => (
+                      {Array.from({length: totalLines}).map((_, i) => (
                         <div key={i}>{i + 1}</div>
                       ))}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 overflow-x-auto">
                       {highlightedLines.map((lineHtml, i) => (
                         <code
                           key={i}
-                          className="hljs block whitespace-pre-wrap break-all"
-                          dangerouslySetInnerHTML={{ __html: lineHtml }}
+                          className="hljs block whitespace-pre"
+                          dangerouslySetInnerHTML={{ __html: lineHtml || ' ' }}
                         />
                       ))}
                     </div>
