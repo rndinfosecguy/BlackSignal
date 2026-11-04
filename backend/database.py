@@ -242,8 +242,8 @@ def get_stats():
     conn = get_conn()
     row = conn.execute("""
         SELECT COUNT(*) as total,
-               SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END) as with_secrets,
-               SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END) as with_passwords,
+               COALESCE(SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END), 0) as with_secrets,
+               COALESCE(SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END), 0) as with_passwords,
                COUNT(DISTINCT source) as sources
         FROM pastes
     """).fetchone()
@@ -261,16 +261,16 @@ def get_stats_filtered(conditions, params):
 
     row = conn.execute(f"""
         SELECT COUNT(*) as total,
-               SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END) as with_secrets,
-               SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END) as with_passwords,
+               COALESCE(SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END), 0) as with_secrets,
+               COALESCE(SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END), 0) as with_passwords,
                COUNT(DISTINCT source) as sources
         FROM pastes p WHERE {where}
     """, params).fetchone()
 
     all_row = conn.execute("""
         SELECT COUNT(*) as total,
-               SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END) as with_secrets,
-               SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END) as with_passwords,
+               COALESCE(SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END), 0) as with_secrets,
+               COALESCE(SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END), 0) as with_passwords,
                COUNT(DISTINCT source) as sources
         FROM pastes
     """).fetchone()
