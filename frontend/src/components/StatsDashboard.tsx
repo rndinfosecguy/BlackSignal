@@ -7,7 +7,7 @@ interface Props { stats: Stats | null }
 export default function StatsDashboard({ stats }: Props) {
   if (!stats) return null
 
-  const fmt = (v: number) => v.toLocaleString()
+  const fmt = (v: number | null) => v != null ? v.toLocaleString() : '0'
 
   const cards = [
     {
