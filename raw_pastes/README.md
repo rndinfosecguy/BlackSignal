@@ -1,1 +1,1 @@
-Delete this file before you start the bot.
+Delete this file before you start using the program.
