@@ -163,7 +163,8 @@ def api_index_status():
 @app.post("/api/reindex")
 def api_reindex():
     clear_cache()
-    return index_all_pastes()
+    threading.Thread(target=index_all_pastes, daemon=True).start()
+    return {"status": "started"}
 
 
 # --- SPA static serving -----------------------------------------------------

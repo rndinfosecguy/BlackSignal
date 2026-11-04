@@ -145,10 +145,22 @@ export function usePastes() {
     }
   }, [fetchPastes, fetchStats])
 
+  const triggerReindex = useCallback(async () => {
+    setIndexStatus({ running: true, current: 0, total: 0, phase: 'indexing' })
+    runningRef.current = true
+    fetch(`${API_BASE}/reindex`, { method: 'POST' }).catch(() => {})
+    // Immediate status poll so the overlay shows real progress right away
+    const status = await fetchJson<IndexStatus>(`${API_BASE}/index-status`)
+    if (status) {
+      setIndexStatus(status)
+      runningRef.current = status.running
+    }
+  }, [])
+
   return {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus,
-    applyFilters,
+    applyFilters, triggerReindex,
   }
 }
 

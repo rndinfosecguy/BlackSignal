@@ -14,6 +14,7 @@ export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, applyFilters,
+    triggerReindex,
   } = usePastes()
 
   const [query, setQuery] = useState('')
@@ -120,6 +121,11 @@ export default function App() {
             <div className="flex items-center gap-6">
               <img src="/bs_logo.png" alt="BlackSignal" className="h-16 shrink-0" />
               <StatsDashboard stats={stats} />
+              <button onClick={triggerReindex}
+                className="shrink-0 text-[11px] px-2.5 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all cursor-pointer"
+                title="Trigger a full re-index of all paste files">
+                Reindex
+              </button>
             </div>
           </header>
 
