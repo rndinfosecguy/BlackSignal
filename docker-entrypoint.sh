@@ -17,14 +17,15 @@ if [ ! -f "$HTPASSWD_FILE" ]; then
     echo "URL:     http://localhost" > "$CRED_FILE"
     echo "Username: $AUTH_USER" >> "$CRED_FILE"
     echo "Password: $AUTH_PASS" >> "$CRED_FILE"
-    echo ""
-    echo "┌──────────────────────────────────────┐"
-    echo "│     BlackSignal Web App Credentials   │"
-    echo "│                                      │"
-    printf "│  URL:     http://localhost             │\n"
-    printf "│  Username: %-28s │\n" "$AUTH_USER"
-    printf "│  Password: %-28s │\n" "$AUTH_PASS"
-    echo "└──────────────────────────────────────┘"
+    INNER=46
+    printf -v BORDER '─%.0s' $(seq 1 $INNER)
+    echo "┌${BORDER}┐"
+    printf "│  %-42s  │\n" "BlackSignal Web App Credentials"
+    printf "│  %-42s  │\n" ""
+    printf "│  %-42s  │\n" "URL:     http://localhost"
+    printf "│  Username: %-32s  │\n" "$AUTH_USER"
+    printf "│  Password: %-32s  │\n" "$AUTH_PASS"
+    echo "└${BORDER}┘"
     echo ""
 fi
 
