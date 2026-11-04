@@ -68,16 +68,24 @@ BlackSignal/
 │   ├── src/
 │   │   ├── App.tsx          # Main UI (filter state, indexing overlay)
 │   │   ├── hooks/           # usePastes — data fetching, index-status polling
-|   │   ├── components/      # PasteCard, PasteDetail, FilterChips, SearchBar, …
+│   │   ├── components/      # PasteCard, PasteDetail, FilterChips, SearchBar, …
 │   │   └── styles/          # Tailwind v4 + dark hacker theme
 │   └── public/bs_logo.png
+├── raw_pastes/          # Paste data (one subdir per source, gitignored contents)
+├── data/                # Runtime DB + credentials (gitignored)
 ├── nginx/default.conf   # Reverse proxy + htpasswd + gzip
 ├── docker-entrypoint.sh # Generates auth creds, starts nginx + backend
 ├── Dockerfile           # Multi-stage build (node → python)
+├── setup.sh             # One-command Docker + Compose installer
 └── docker-compose.yml
 ```
 
 ## Quick Start
+
+### 0. Install required software
+```bash
+./setup.sh
+```
 
 ### 1. Prepare your data
 
