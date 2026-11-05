@@ -13,7 +13,7 @@ logger = logging.getLogger("blacksignal")
 
 # Number of parallel I/O + detection workers. Set INDEX_WORKERS=0 to disable
 # multi-threaded indexing (same as the original single-threaded behaviour).
-_INDEX_WORKERS = int(os.environ.get("INDEX_WORKERS", "4"))
+_INDEX_WORKERS = int(os.environ.get("INDEX_WORKERS", "6"))
 
 _index_lock = threading.Lock()
 
@@ -31,6 +31,9 @@ def get_index_progress():
 
 def _process_single(f):
     """Read, detect and scan a single file — runs in a worker thread."""
+    # Skip tiny files — realistically can't contain meaningful secrets
+    if f["size"] < 32:
+        return {"id": f["id"], "skipped": True}
     try:
         with open(f["path"], "r", errors="replace") as fh:
             content = fh.read(512000)
@@ -91,6 +94,7 @@ def index_all_pastes():
             pending: OrderedDict[int, object] = OrderedDict()
             submit_idx = 0
             prog = 0
+            skipped_count = 0
 
             # Lookup from file id -> index in new_files
             new_file_idx = {f["id"]: i for i, f in enumerate(new_files)}
@@ -118,7 +122,9 @@ def index_all_pastes():
                 idx = new_file_idx[f["id"]]
                 result = pending.pop(idx).result()
 
-                if result.get("error"):
+                if result.get("skipped"):
+                    skipped_count += 1
+                elif result.get("error"):
                     logger.warning("Failed to process %s: %s",
                                    result["id"], result["error"])
                 else:
@@ -136,16 +142,19 @@ def index_all_pastes():
                         commit=False,
                     )
                     indexed_count += 1
-                    if indexed_count % 100 == 0:
+                    if indexed_count % 500 == 0:
                         get_conn().commit()
 
                 fill()
 
             executor.shutdown(wait=True)
             get_conn().commit()
+            if skipped_count:
+                logger.info("Skipped %d files under 32 bytes", skipped_count)
 
         else:
             # ---- synchronous fallback (same logic as original) ----------------
+            skipped_count = 0
             for idx, f in enumerate(files, 1):
                 if idx % LOG_INTERVAL == 0:
                     _index_progress.update(current=idx, phase="indexing")
@@ -153,6 +162,10 @@ def index_all_pastes():
                                 idx, total_files, 100.0 * idx / total_files)
 
                 if f["id"] in indexed_ids:
+                    continue
+
+                if f["size"] < 32:
+                    skipped_count += 1
                     continue
 
                 try:
@@ -179,12 +192,14 @@ def index_all_pastes():
                         commit=False,
                     )
                     indexed_count += 1
-                    if indexed_count % 100 == 0:
+                    if indexed_count % 500 == 0:
                         get_conn().commit()
                 except Exception as e:
                     logger.warning("Failed to process %s: %s", f["path"], e)
 
             get_conn().commit()
+            if skipped_count:
+                logger.info("Skipped %d files under 32 bytes", skipped_count)
 
         # ---- deletion pass (unchanged) ---------------------------------------
         for pid in (indexed_ids - current_ids):
