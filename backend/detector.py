@@ -138,7 +138,7 @@ SCAN_PATTERNS = [
 def scan_content(content):
     findings = []
 
-    scan_limit = content
+    scan_limit = content[:200000] if len(content) > 200000 else content
     lines = scan_limit.split("\n")
 
     for i, line in enumerate(lines, 1):
@@ -154,9 +154,23 @@ def scan_content(content):
                     digits = re.sub(r'[ -]', '', group)
                     if not _luhn_check(digits):
                         continue
-                    # IIN check — real cards start with 2-6
-                    # (Visa:4, Mastercard:2/51-55, Amex:34/37, Discover:6011/65)
-                    if digits[0] not in '23456':
+                    # IIN + digit-length validation
+                    # Visa: 4xxx (13 or 16 digits)
+                    # Mastercard: 51-55 or 2221-2720 (16 digits)
+                    # Amex: 34 or 37 (15 digits)
+                    # Discover: 6011 or 65 (16 digits)
+                    d = digits
+                    if d[0] not in '23456':
+                        continue
+                    if d[0] == '2' and (len(d) != 16 or not (2221 <= int(d[:4]) <= 2720)):
+                        continue
+                    if d[0] == '3' and len(d) != 15:
+                        continue
+                    if d[0] == '4' and len(d) not in (13, 16):
+                        continue
+                    if d[0] == '5' and (len(d) != 16 or not (51 <= int(d[:2]) <= 55)):
+                        continue
+                    if d[0] == '6' and (len(d) != 16 or not (d[:4] == '6011' or d[:2] == '65')):
                         continue
 
                 # ── Email:password: skip proxy/URL query strings ──────────
@@ -164,9 +178,9 @@ def scan_content(content):
                     colon_idx = group.find(':')
                     if colon_idx != -1:
                         pw_side = group[colon_idx + 1:].strip()
-                        # Block if the "password" side looks like a URL
-                        # query string or fragment (port + ?/#, common in proxy/VPN configs)
-                        if '?' in pw_side or '#' in pw_side:
+                        # Block if the "password" side looks like a URL/path/proxy config
+                        # rather than a real credential
+                        if '?' in pw_side or '#' in pw_side or '/' in pw_side or pw_side.startswith('"'):
                             continue
 
                 # ── Credential assignment: validate the value ─────────────
