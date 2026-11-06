@@ -31,6 +31,8 @@ const TYPE_LANG_MAP: Record<string, string> = {
   c: 'c', markdown: 'markdown', csv: 'bash', sql: 'sql', css: 'css',
 }
 
+const SCAN_LIMIT = 200000
+
 /**
  * Split highlighted HTML into per-line, tag-balanced chunks so each line can be
  * rendered separately (for the gutter) without leaking open <span> tags across
@@ -171,6 +173,12 @@ export default function PasteDetail({ id, onClose }: Props) {
             <span className="text-xs text-[#666666]">{paste?.content_type}</span>
             <span className="text-xs text-[#555555]" style={{ fontFamily: 'var(--font-mono)' }}>{paste?.filename}</span>
             <span className="text-[10px] text-[#444444]">{formatSize(paste?.size || 0)}</span>
+            {paste?.content && paste.content.length > SCAN_LIMIT && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ffd700]/10 text-[#ffd700]/80 whitespace-nowrap"
+                title="Only first 200K chars were scanned. Line numbers and detected secrets beyond this limit may be incorrect.">
+                partial scan
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2.5">
             
