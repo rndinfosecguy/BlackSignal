@@ -169,9 +169,9 @@ export default function PasteDetail({ id, onClose }: Props) {
             <span className="text-xs text-[#555555]" style={{ fontFamily: 'var(--font-mono)' }}>{paste?.filename}</span>
           </div>
           <div className="flex items-center gap-2.5">
-            {paste?.has_passwords && (
+            {paste?.has_passwords ? (
               <span className="text-[10px] px-2 py-1 rounded bg-[#ff004d]/10 text-[#ff004d]">Passwords</span>
-            )}
+            ) : null}
             <button onClick={handleCopy}
               className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all">
               {copied ? 'Copied' : 'Copy'}
