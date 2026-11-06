@@ -31,8 +31,6 @@ const TYPE_LANG_MAP: Record<string, string> = {
   c: 'c', markdown: 'markdown', csv: 'bash', sql: 'sql', css: 'css',
 }
 
-const HIGHLIGHT_LIMIT = 100000
-
 /**
  * Split highlighted HTML into per-line, tag-balanced chunks so each line can be
  * rendered separately (for the gutter) without leaking open <span> tags across
@@ -136,8 +134,7 @@ export default function PasteDetail({ id, onClose }: Props) {
   const highlighted = useMemo(() => {
     if (!paste || !contentVisible) return ''
     const lang = TYPE_LANG_MAP[paste.content_type] || 'plaintext'
-    const content = paste.content.length > HIGHLIGHT_LIMIT ? paste.content.slice(0, HIGHLIGHT_LIMIT) : paste.content
-    try { return hljs.highlight(content, { language: lang }).value }
+    try { return hljs.highlight(paste.content, { language: lang }).value }
     catch {
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       return esc(content)
@@ -153,11 +150,8 @@ export default function PasteDetail({ id, onClose }: Props) {
   // so line numbers always match regardless of highlight.js output quirks.
   const totalLines = useMemo(() => {
     if (!paste || !contentVisible) return 0
-    const c = paste.content.length > HIGHLIGHT_LIMIT ? paste.content.slice(0, HIGHLIGHT_LIMIT) : paste.content
-    return c.split('\n').length
+    return paste.content.split('\n').length
   }, [paste, contentVisible])
-
-  const isTruncated = paste ? paste.content.length > HIGHLIGHT_LIMIT : false
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -226,7 +220,7 @@ export default function PasteDetail({ id, onClose }: Props) {
               )}
               {contentVisible && (
                 <>
-                  {isTruncated && <div className="text-[10px] text-[#555555] mb-2">Content truncated to {Math.round(HIGHLIGHT_LIMIT / 1000)}KB</div>}
+                  
                   <div className="flex">
                     <div
                       className="shrink-0 select-none text-right pr-3 mr-3 border-r border-[#222222] text-[#555555]"

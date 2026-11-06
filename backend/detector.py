@@ -138,7 +138,7 @@ SCAN_PATTERNS = [
 def scan_content(content):
     findings = []
 
-    scan_limit = content[:100000] if len(content) > 100000 else content
+    scan_limit = content
     lines = scan_limit.split("\n")
 
     for i, line in enumerate(lines, 1):
