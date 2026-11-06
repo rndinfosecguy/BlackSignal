@@ -83,6 +83,13 @@ interface PasteDetailData {
 }
 interface Props { id: string; onClose: () => void }
 
+function formatSize(bytes: number): string {
+  if (bytes <= 0) return 'empty'
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
 export default function PasteDetail({ id, onClose }: Props) {
   const [paste, setPaste] = useState<PasteDetailData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -134,10 +141,12 @@ export default function PasteDetail({ id, onClose }: Props) {
   const highlighted = useMemo(() => {
     if (!paste || !contentVisible) return ''
     const lang = TYPE_LANG_MAP[paste.content_type] || 'plaintext'
-    try { return hljs.highlight(paste.content, { language: lang }).value }
-    catch {
+    try {
+      const txt = paste.content || ''
+      return hljs.highlight(txt, { language: lang }).value
+    } catch {
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      return esc(content)
+      return esc(paste.content || '')
     }
   }, [paste, contentVisible])
 
@@ -161,11 +170,10 @@ export default function PasteDetail({ id, onClose }: Props) {
             <span className="text-sm text-[#e8e8e8] font-medium">{paste?.source || 'Paste Detail'}</span>
             <span className="text-xs text-[#666666]">{paste?.content_type}</span>
             <span className="text-xs text-[#555555]" style={{ fontFamily: 'var(--font-mono)' }}>{paste?.filename}</span>
+            <span className="text-[10px] text-[#444444]">{formatSize(paste?.size || 0)}</span>
           </div>
           <div className="flex items-center gap-2.5">
-            {paste?.has_passwords ? (
-              <span className="text-[10px] px-2 py-1 rounded bg-[#ff004d]/10 text-[#ff004d]">Passwords</span>
-            ) : null}
+            
             <button onClick={handleCopy}
               className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all">
               {copied ? 'Copied' : 'Copy'}
@@ -178,7 +186,28 @@ export default function PasteDetail({ id, onClose }: Props) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
+        {paste && paste.secrets_detail && paste.secrets_detail.length > 0 && (
+          <div className="bg-[#0d0d0d] p-4 border-b border-[#222222]">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-[#ff004d] font-medium">{paste.secrets_detail.length} secret{paste.secrets_detail.length === 1 ? '' : 's'} detected</div>
+              <button onClick={() => setContentVisible(!contentVisible)}
+                className="text-[11px] px-2.5 py-1.5 rounded-md border border-[#222222] text-[#00e5ff] hover:text-[#ff004d] transition-all cursor-pointer">
+                {contentVisible ? 'Hide content' : 'Show content'}
+              </button>
+            </div>
+            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+              {paste.secrets_detail.map((s, i) => (
+                <div key={i} className="text-xs text-[#777777] leading-relaxed">
+                  <span className="text-[#ff004d]">ln {s.line}</span>
+                  <span className="text-[#ffd700] ml-1">[{s.type}]</span>
+                  <span className="text-[#555555] ml-1" style={{ fontFamily: 'var(--font-mono)' }}>{s.match}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        <div className="flex-1 overflow-auto px-4 pb-4">
           {loading ? (
             <div className="flex items-center justify-center h-32 text-[#555555]">Loading...</div>
           ) : fetchError ? (
@@ -188,62 +217,27 @@ export default function PasteDetail({ id, onClose }: Props) {
                 <div className="text-[#555555] text-xs">{id.slice(0, 24)}...</div>
               </div>
             </div>
-          ) : paste ? (
-            <div>
-              {paste.secrets_detail && paste.secrets_detail.length > 0 && (
-                <div className="mb-3 pb-3 border-b border-[#222222]">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs text-[#ff004d] font-medium">{paste.secrets_detail.length} secret{paste.secrets_detail.length === 1 ? '' : 's'} detected</div>
-                    <button onClick={() => setContentVisible(!contentVisible)}
-                      className="text-xs text-[#666666] hover:text-[#00e5ff] transition-all">
-                      {contentVisible ? 'Hide full content' : 'Show full content'}
-                    </button>
-                  </div>
-                  <div className="space-y-0.5 max-h-40 overflow-y-auto">
-                    {paste.secrets_detail.map((s, i) => (
-                      <div key={i} className="text-xs text-[#777777] leading-relaxed">
-                        <span className="text-[#ff004d]">ln {s.line}</span>
-                        <span className="text-[#ffd700] ml-1">[{s.type}]</span>
-                        <span className="text-[#555555] ml-1" style={{ fontFamily: 'var(--font-mono)' }}>{s.match}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!contentVisible && (
-                <div className="flex items-center justify-center py-10">
-                  <button onClick={() => setContentVisible(true)}
-                    className="text-xs px-5 py-2 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all cursor-pointer">
-                    Show full paste content
-                  </button>
-                </div>
-              )}
-              {contentVisible && (
-                <>
-                  
-                  <div className="flex">
-                    <div
-                      className="shrink-0 select-none text-right pr-3 mr-3 border-r border-[#222222] text-[#555555]"
-                      style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7 }}
-                    >
-                      {Array.from({length: totalLines}).map((_, i) => (
-                        <div key={i}>{i + 1}</div>
-                      ))}
-                    </div>
-                    <div className="flex-1 min-w-0 overflow-x-auto">
-                      {highlightedLines.map((lineHtml, i) => (
-                        <code
-                          key={i}
-                          className="hljs block whitespace-pre"
-                          dangerouslySetInnerHTML={{ __html: lineHtml || ' ' }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+          ) : paste && contentVisible ? (
+            <div className="flex">
+              <div
+                className="shrink-0 select-none text-right pr-3 mr-3 border-r border-[#222222] text-[#555555]"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7 }}
+              >
+                {Array.from({length: totalLines}).map((_, i) => (
+                  <div key={i}>{i + 1}</div>
+                ))}
+              </div>
+              <div className="flex-1 min-w-0 overflow-x-auto">
+                {highlightedLines.map((lineHtml, i) => (
+                  <code
+                    key={i}
+                    className="hljs block whitespace-pre"
+                    dangerouslySetInnerHTML={{ __html: lineHtml || ' ' }}
+                  />
+                ))}
+              </div>
             </div>
-          ) : null}
+          ) : paste ? null : null}
         </div>
       </div>
     </div>
