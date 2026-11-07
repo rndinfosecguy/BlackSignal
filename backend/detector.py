@@ -55,11 +55,29 @@ ONION_RE = re.compile(r'[a-z0-9]{16,56}\.onion', re.IGNORECASE)
 AUTH_HEADER_RE = re.compile(r'authorization:\s*(?:basic|bearer)\s+[^\s]{20,}', re.IGNORECASE)
 
 # Credit card: validated with Luhn algorithm + heuristic filters below.
-CC_RE = re.compile(r'\b(?:\d[ -]*?){13,16}\b')
+CC_RE = re.compile(r'\b(?:\d[- ]*?){13,16}\b')
 
 # SQL INSERT INTO user-related tables (database dumps with credentials).
 INSERT_INTO_RE = re.compile(
     r'INSERT\s+INTO\s+\w*(?:user|account|credential|password|auth|login|member|admin|customer|profile|employee|session|token|api)[_\w]*',
+    re.IGNORECASE
+)
+
+# GitHub personal access token (pat_ prefix, not covered by GITHUB_TOKEN_RE).
+GITHUB_PAT_RE = re.compile(r'github_pat_[A-Za-z0-9_]{20,}')
+
+# PHP mysqli_connect call — often contains hardcoded credentials.
+MYSQLI_CONNECT_RE = re.compile(
+    r'mysqli_connect\s*\([^;]+',
+    re.IGNORECASE
+)
+
+# WordPress config file reference.
+WPCONFIG_RE = re.compile(r'wp-config\.php', re.IGNORECASE)
+
+# OAuth client_secret assignment.
+CLIENT_SECRET_RE = re.compile(
+    r'client_secret\s*=\s*\S+',
     re.IGNORECASE
 )
 
@@ -117,8 +135,9 @@ _HAS_TRIGGER = re.compile(
     r'[@=]|BEGIN |AKIA|gh[pousr]_|sk_live|rk_live|pk_live|AIza'
     r'|eyJ[A-Za-z0-9]|xox[baprs]-|mfa\.|://|\.onion|authorization:'
     r'|INSERT\s+INTO|\d{13,}'
-    r'|\b\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d'
-    r'[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*',
+    r'|\b\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d'
+    r'[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*'
+    r'|github_pat_|mysqli_connect|wp-config|client_secret',
     re.IGNORECASE
 )
 
@@ -128,6 +147,7 @@ SCAN_PATTERNS = [
     ("private_key", PRIVATE_KEY_RE),
     ("aws_key", AWS_KEY_RE),
     ("github_token", GITHUB_TOKEN_RE),
+    ("github_pat", GITHUB_PAT_RE),
     ("stripe_key", STRIPE_LIVE_RE),
     ("google_api_key", GOOGLE_API_RE),
     ("jwt_token", JWT_RE),
@@ -138,6 +158,9 @@ SCAN_PATTERNS = [
     ("auth_header", AUTH_HEADER_RE),
     ("credit_card", CC_RE),
     ("sql_user_insert", INSERT_INTO_RE),
+    ("mysql_connect", MYSQLI_CONNECT_RE),
+    ("wp_config", WPCONFIG_RE),
+    ("client_secret", CLIENT_SECRET_RE),
 ]
 
 
@@ -164,6 +187,12 @@ def scan_content(content, scan_limit=None):
 
                 # ── Credit card: Luhn + heuristic filters ────────────────
                 if name == "credit_card":
+                    # Skip if preceded by '.' — decimal fraction, not a CC
+                    if match.start() > 0 and line[match.start() - 1] == '.':
+                        continue
+                    # Skip if preceded by '-' and match contains '-' — embedded in SID/ID
+                    if '-' in group and match.start() > 0 and line[match.start() - 1] == '-':
+                        continue
                     digits = re.sub(r'[ -]', '', group)
                     if not _luhn_check(digits):
                         continue
@@ -190,10 +219,17 @@ def scan_content(content, scan_limit=None):
                 elif name == "email:password":
                     colon_idx = group.find(':')
                     if colon_idx != -1:
+                        # Skip double colon (::) — protocol/version separator, not a password
+                        if colon_idx + 1 < len(group) and group[colon_idx + 1] == ':':
+                            continue
                         pw_side = group[colon_idx + 1:].strip()
-                        # Block if the "password" side looks like a URL/path/proxy config
+                        # Block if the "password" side looks like a URL/path/proxy/config
                         # rather than a real credential
                         if '?' in pw_side or '#' in pw_side or '/' in pw_side or pw_side.startswith('"'):
+                            continue
+                        # Block if it contains param-style assignments (= followed by digit)
+                        if re.search(r'=\d', pw_side):
+                            continue
                             continue
 
                 # ── Credential assignment: validate the value ─────────────
@@ -210,8 +246,24 @@ def scan_content(content, scan_limit=None):
                     # Skip function calls (foo()) and property/method chains (foo.bar)
                     if '(' in value or '.' in value:
                         continue
+                    # Skip shell variable references ($VAR, ${VAR})
+                    if '$' in value or '{' in value:
+                        continue
                     # Skip if value is all-same-character (masked/placeholder)
                     if len(set(value)) == 1:
+                        continue
+
+                # ── Auth header: skip variable references ─────────────────
+                elif name == "auth_header":
+                    if '$' in group:
+                        continue
+
+                # ── Client secret: validate the value ────────────────────
+                elif name == "client_secret":
+                    value = group.split('=', 1)[1].strip().strip('"\'') if '=' in group else group
+                    if not value or len(value) < 4:
+                        continue
+                    if '(' in value or '.' in value or '$' in value:
                         continue
 
                 findings.append({
