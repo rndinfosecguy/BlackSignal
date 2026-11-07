@@ -102,6 +102,7 @@ export default function PasteDetail({ id, onClose }: Props) {
   useEffect(() => {
     setLoading(true)
     setFetchError(false)
+    document.body.style.overflow = 'hidden'
     fetchPasteDetail(id).then(p => {
       setPaste(p)
       setLoading(false)
@@ -112,6 +113,7 @@ export default function PasteDetail({ id, onClose }: Props) {
       setLoading(false)
       setFetchError(true)
     })
+    return () => { document.body.style.overflow = '' }
   }, [id])
 
   useEffect(() => {
@@ -165,8 +167,8 @@ export default function PasteDetail({ id, onClose }: Props) {
   }, [paste, contentVisible])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-[#0d0d0d] border border-[#222222] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
+      <div onClick={e => e.stopPropagation()} className="bg-[#0d0d0d] border border-[#222222] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-[#222222]">
           <div className="flex items-center gap-3">
             <span className="text-sm text-[#e8e8e8] font-medium">{paste?.source || 'Paste Detail'}</span>
