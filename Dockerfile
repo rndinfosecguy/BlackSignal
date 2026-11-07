@@ -23,6 +23,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
+COPY VERSION .
 COPY --from=frontend-builder /build/dist /app/static
 
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf

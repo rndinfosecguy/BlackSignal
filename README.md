@@ -143,6 +143,7 @@ Visit `http://localhost:9090`
 | GET | `/api/secret-types` | Detected secret categories with counts |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
 | POST | `/api/reindex` | Trigger a manual re-index |
+| GET | `/api/version` | App version: `{ version: "0.9.0" }` |
 
 Example:
 

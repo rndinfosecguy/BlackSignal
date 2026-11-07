@@ -63,6 +63,7 @@ export function usePastes() {
   const [types, setTypes] = useState<TypeCount[]>([])
   const [secretTypes, setSecretTypes] = useState<SecretTypeCount[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
+  const [version, setVersion] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [indexStatus, setIndexStatus] = useState<IndexStatus>(defaultIndexStatus)
 
@@ -120,15 +121,17 @@ export function usePastes() {
         // Fetch initial data only once the indexer is idle
         if (!data.running && !dataLoaded) {
           dataLoaded = true
-          const [s, t, st] = await Promise.all([
+          const [s, t, st, v] = await Promise.all([
             fetchJson<SourceCount[]>(`${API_BASE}/sources`),
             fetchJson<TypeCount[]>(`${API_BASE}/types`),
             fetchJson<SecretTypeCount[]>(`${API_BASE}/secret-types`),
+            fetchJson<{ version: string }>(`${API_BASE}/version`),
           ])
           if (!cancelled) {
             if (s) setSources(s)
             if (t) setTypes(t)
             if (st) setSecretTypes(st)
+            if (v) setVersion(v.version)
             fetchPastes({ page: 1 })
             fetchStats({})
           }
@@ -159,7 +162,7 @@ export function usePastes() {
 
   return {
     pastes, total, page, totalPages, loading, error,
-    sources, types, secretTypes, stats, indexStatus,
+    sources, types, secretTypes, stats, indexStatus, version,
     applyFilters, triggerReindex,
   }
 }

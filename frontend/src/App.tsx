@@ -13,8 +13,8 @@ type Overrides = Partial<FilterState>
 export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
-    sources, types, secretTypes, stats, indexStatus, applyFilters,
-    triggerReindex,
+    sources, types, secretTypes, stats, indexStatus, version,
+    applyFilters, triggerReindex,
   } = usePastes()
 
   const [query, setQuery] = useState('')
@@ -168,6 +168,7 @@ export default function App() {
               <span>BlackSignal &middot; Paste Intelligence System</span>
               <span className="text-[#555555]">|</span>
               <span className="text-[#555555]">FOR RESEARCH ONLY</span>
+              {version && <><span className="text-[#555555]">|</span><span>{version}</span></>}
             </div>
             <div className="text-[12px] text-[#444444]">
               {stats ? `${stats.total.toLocaleString()} pastes indexed` : ''}

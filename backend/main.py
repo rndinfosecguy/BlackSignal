@@ -20,6 +20,20 @@ logger = logging.getLogger("blacksignal")
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 REINDEX_INTERVAL = int(os.environ.get("REINDEX_INTERVAL", "300"))
 
+try:
+    # Check multiple locations: repo root (dev) and /app (Docker)
+    for p in (os.path.join(os.path.dirname(__file__), "..", "VERSION"),
+              os.path.join(os.path.dirname(__file__), "VERSION"),
+              "/app/VERSION"):
+        if os.path.exists(p):
+            with open(p) as f:
+                APP_VERSION = f.read().strip()
+            break
+    else:
+        APP_VERSION = "0.0.0"
+except Exception:
+    APP_VERSION = "0.0.0"
+
 
 def _parse_bool(v: str | None) -> bool | None:
     """FastAPI's ``bool`` type treats ``'false'`` as ``True`` (non-empty string).
@@ -161,6 +175,11 @@ def api_paste_detail(paste_id: str):
     if not paste:
         raise HTTPException(status_code=404, detail="Paste not found")
     return paste
+
+
+@app.get("/api/version")
+def api_version():
+    return {"version": APP_VERSION}
 
 
 @app.get("/api/index-status")
