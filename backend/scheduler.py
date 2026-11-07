@@ -108,7 +108,7 @@ def index_all_pastes(scan_limit=None):
             skipped_count = 0
 
             # Lookup from file id -> index in new_files
-            new_file_idx = {f["id"]: i for i, f in enumerate(new_files)}
+            new_file_idx = {f["source"] + ":" + f["id"]: i for i, f in enumerate(new_files)}
 
             def fill():
                 nonlocal submit_idx
@@ -130,7 +130,7 @@ def index_all_pastes(scan_limit=None):
                 if f["id"] in indexed_ids:
                     continue
 
-                idx = new_file_idx[f["id"]]
+                idx = new_file_idx[f["source"] + ":" + f["id"]]
                 result = pending.pop(idx).result()
 
                 if result.get("skipped"):
