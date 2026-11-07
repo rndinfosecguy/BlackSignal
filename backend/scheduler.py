@@ -29,8 +29,9 @@ def get_index_progress():
     return dict(_index_progress)
 
 
-def _process_single(f):
-    """Read, detect and scan a single file — runs in a worker thread."""
+def _process_single(f, scan_limit=None):
+    """Read, detect and scan a single file — runs in a worker thread.
+    scan_limit — max chars to scan (None = default 200K, 0 = unlimited)."""
     # Skip tiny files — realistically can't contain meaningful secrets
     if f["size"] < 32:
         return {"id": f["id"], "skipped": True}
@@ -42,7 +43,7 @@ def _process_single(f):
 
     try:
         content_type = detect_content_type(f["path"], content)
-        has_passwords, has_secrets, findings = scan_content(content)
+        has_passwords, has_secrets, findings = scan_content(content, scan_limit=scan_limit)
         return {
             "id": f["id"],
             "filename": f["filename"],
@@ -59,7 +60,9 @@ def _process_single(f):
         return {"id": f["id"], "error": str(e)}
 
 
-def index_all_pastes():
+def index_all_pastes(scan_limit=None):
+    """Index all paste files. 
+    scan_limit — max chars to scan per file (None = default 200K, 0 = unlimited)."""
     if not _index_lock.acquire(blocking=False):
         logger.info("Index already in progress, skipping")
         return
@@ -82,6 +85,14 @@ def index_all_pastes():
         for f in files:
             current_ids.add(f["id"])
 
+        # In comprehensive mode, re-process files that exceeded the default scan limit
+        if scan_limit == 0:
+            default_limit = 200000
+            recheck_ids = {f["id"] for f in files if f["id"] in indexed_ids and f["size"] > default_limit}
+            if recheck_ids:
+                logger.info("Comprehensive: re-processing %d files that exceeded the size limit", len(recheck_ids))
+            indexed_ids -= recheck_ids
+
         # Collect files that actually need processing (preserving order)
         new_files = [f for f in files if f["id"] not in indexed_ids]
 
@@ -102,7 +113,7 @@ def index_all_pastes():
             def fill():
                 nonlocal submit_idx
                 while submit_idx < len(new_files) and len(pending) < _INDEX_WORKERS * 2:
-                    future = executor.submit(_process_single, new_files[submit_idx])
+                    future = executor.submit(_process_single, new_files[submit_idx], scan_limit)
                     pending[submit_idx] = future
                     submit_idx += 1
 
@@ -177,7 +188,7 @@ def index_all_pastes():
 
                 try:
                     content_type = detect_content_type(f["path"], content)
-                    has_passwords, has_secrets, findings = scan_content(content)
+                    has_passwords, has_secrets, findings = scan_content(content, scan_limit=scan_limit)
                     upsert_paste(
                         paste_id=f["id"],
                         filename=f["filename"],

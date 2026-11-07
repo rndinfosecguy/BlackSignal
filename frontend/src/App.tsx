@@ -23,6 +23,7 @@ export default function App() {
   const [activeSecretTypes, setActiveSecretTypes] = useState<string[]>([])
   const [hasSecrets, setHasSecrets] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [showReindexDialog, setShowReindexDialog] = useState(false)
 
   const applyAll = useCallback((overrides: Overrides) => {
     const filterChanged =
@@ -121,7 +122,7 @@ export default function App() {
             <div className="flex items-center gap-6">
               <img src="/bs_logo.png" alt="BlackSignal" className="h-16 shrink-0" />
               <StatsDashboard stats={stats} />
-              <button onClick={triggerReindex}
+              <button onClick={() => { document.body.style.overflow = 'hidden'; setShowReindexDialog(true) }}
                 className="shrink-0 text-[11px] px-2.5 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all cursor-pointer"
                 title="Trigger a full re-index of all paste files">
                 Reindex
@@ -163,6 +164,37 @@ export default function App() {
 
           <Pagination page={page} totalPages={totalPages} total={total} onChange={handlePageChange} />
 
+          {showReindexDialog && (
+            <div onClick={() => { setShowReindexDialog(false); document.body.style.overflow = '' }}
+              className="fixed inset-0 z-40 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
+              <div onClick={e => e.stopPropagation()}
+                className="bg-[#131313] border border-[#222222] rounded-xl w-full max-w-sm p-6">
+                <div className="text-sm text-[#e8e8e8] font-medium mb-1">Reindex all pastes</div>
+                <div className="text-[11px] text-[#555555] mb-4">Choose the indexing mode:</div>
+                <button onClick={() => { document.body.style.overflow = ''; setShowReindexDialog(false); triggerReindex('standard') }}
+                  className="w-full text-sm px-4 py-2 rounded-md border border-[#222222] text-[#00e5ff] hover:bg-[#00e5ff]/5 transition-all cursor-pointer mb-2">
+                  Standard — fast (200K limit per file)
+                </button>
+                <details className="text-[11px] text-[#555555]">
+                  <summary className="cursor-pointer text-[#ffd700]">Comprehensive — scan everything</summary>
+                  <div className="mt-2 text-[#777777] leading-relaxed">
+                    Disables the file size limit and scans the full content of every paste.
+                    The additional detections depend on your data — pastes with many large files
+                    will benefit more. It can take significantly longer; for large datasets it
+                    could take hours.
+                  </div>
+                  <button onClick={() => { document.body.style.overflow = ''; setShowReindexDialog(false); triggerReindex('comprehensive') }}
+                    className="w-full mt-3 text-sm px-4 py-2 rounded-md border border-[#ffd700] text-[#ffd700] hover:bg-[#ffd700]/5 transition-all cursor-pointer">
+                    Start comprehensive reindex
+                  </button>
+                </details>
+                <button onClick={() => { document.body.style.overflow = ''; setShowReindexDialog(false) }}
+                  className="w-full mt-3 text-xs px-4 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#666666] transition-all cursor-pointer">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           <footer className="mt-10 pt-5 border-t border-[#1a1a1a] flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 text-[12px] text-[#444444]">
               <span>BlackSignal &middot; Paste Intelligence System</span>

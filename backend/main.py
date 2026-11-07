@@ -188,10 +188,11 @@ def api_index_status():
 
 
 @app.post("/api/reindex")
-def api_reindex():
+def api_reindex(mode: str = Query("standard", description="'standard' (200K limit) or 'comprehensive' (no limit)")):
     clear_cache()
-    threading.Thread(target=index_all_pastes, daemon=True).start()
-    return {"status": "started"}
+    scan_limit = 0 if mode == "comprehensive" else None
+    threading.Thread(target=index_all_pastes, daemon=True, kwargs={"scan_limit": scan_limit}).start()
+    return {"status": "started", "mode": mode}
 
 
 # --- SPA static serving -----------------------------------------------------

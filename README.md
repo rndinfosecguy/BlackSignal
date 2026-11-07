@@ -17,7 +17,7 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 - **Search & browse** — full-text search (SQLite FTS5) across pastes with pagination
 - **Filtering** — by source site, detected content type, and specific sensitive-data categories
 - **Sensitive-data detection** — automatic regex/keyword scanning for:
-  `email:password`, `private_key`, `aws_key`, `github_token`, `stripe_key`, `google_api_key`, `jwt_token`, `slack_token`, `discord_token`, `connection_string`, `onion_address`, `auth_header`, `credit_card`, `heroku_api_key` + custom search terms
+  `email:password`, `credential_assignment`, `private_key`, `aws_key`, `github_token`, `stripe_key`, `google_api_key`, `jwt_token`, `slack_token`, `discord_token`, `connection_string`, `onion_address`, `auth_header`, `credit_card`, `sql_user_insert` + custom search terms
 - **Secret-first detail view** — detected secrets are shown at the top of a paste, with the full content collapsed by default
 - **Syntax highlighting** — highlight.js for different coding languages
 - **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
@@ -77,6 +77,7 @@ BlackSignal/
 ├── docker-entrypoint.sh # Generates auth creds, starts nginx + backend
 ├── Dockerfile           # Multi-stage build (node → python)
 ├── setup.sh             # One-command Docker + Compose installer
+├── VERSION              # Semantic version number
 └── docker-compose.yml
 ```
 
@@ -142,8 +143,8 @@ Visit `http://localhost:9090`
 | GET | `/api/types` | Content-type distribution |
 | GET | `/api/secret-types` | Detected secret categories with counts |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
-| POST | `/api/reindex` | Trigger a manual re-index |
-| GET | `/api/version` | App version: `{ version: "0.9.0" }` |
+| POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default) or `?mode=comprehensive` (no size limit) |
+| GET | `/api/version` | App version: `{ version: "0.10.0" }` |
 
 Example:
 

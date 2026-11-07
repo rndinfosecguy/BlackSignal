@@ -141,11 +141,18 @@ SCAN_PATTERNS = [
 ]
 
 
-def scan_content(content):
+def scan_content(content, scan_limit=None):
+    """Scan paste content for secrets. 
+    scan_limit — max characters to scan (None = default 200K, 0 = unlimited)."""
     findings = []
 
-    scan_limit = content[:200000] if len(content) > 200000 else content
-    lines = scan_limit.split("\n")
+    if scan_limit == 0:
+        scan_text = content
+    elif scan_limit is None:
+        scan_text = content[:200000] if len(content) > 200000 else content
+    else:
+        scan_text = content[:scan_limit] if len(content) > scan_limit else content
+    lines = scan_text.split("\n")
 
     for i, line in enumerate(lines, 1):
         # Fast pre-filter: skip lines that can't match any pattern
