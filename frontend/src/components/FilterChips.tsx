@@ -15,8 +15,12 @@ interface Props {
   onHasSecretsToggle: () => void
 }
 
-const SOURCE_STYLES: Record<string, string> = {
-  github: 'bg-[#00e5ff]', pastebin: 'bg-[#ffd700]', dpaste: 'bg-[#ff79c6]', pastesio: 'bg-[#888888]',
+function sourceColor(source: string): string {
+  let hash = 0
+  for (let i = 0; i < source.length; i++)
+    hash = source.charCodeAt(i) + ((hash << 5) - hash)
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 80%, 55%)`
 }
 
 const ACTIVE = 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5'
@@ -28,7 +32,7 @@ const Chip = ({ label, count, active, onClick, dotColor, className, activeStyle 
 }) => (
   <button onClick={onClick}
     className={`text-xs px-3 py-1.5 rounded-md border transition-all duration-200 cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${className || ''} ${active ? (activeStyle || ACTIVE) : INACTIVE}`}>
-    {dotColor && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />}
+    {dotColor && <span style={{ backgroundColor: dotColor }} className="w-1.5 h-1.5 rounded-full shrink-0" />}
     {label}
     {count !== undefined && <span className="text-[#444444] ml-0.5">{count.toLocaleString()}</span>}
   </button>
@@ -44,7 +48,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSource,
         <Chip label="All" active={!activeSource} onClick={() => onSourceChange('')} />
         {sources.filter(s => s.count > 0).map(s => (
           <Chip key={s.source} label={s.source} count={s.count} active={activeSource === s.source}
-            dotColor={SOURCE_STYLES[s.source]} onClick={() => onSourceChange(activeSource === s.source ? '' : s.source)} />
+            dotColor={sourceColor(s.source)} onClick={() => onSourceChange(activeSource === s.source ? '' : s.source)} />
         ))}
       </div>
 

@@ -6,11 +6,12 @@ interface Props {
   onClick: (id: string) => void
 }
 
-const SOURCE_DOTS: Record<string, string> = {
-  github:   'bg-[#00e5ff]',
-  pastebin: 'bg-[#ffd700]',
-  dpaste:   'bg-[#ff79c6]',
-  pastesio: 'bg-[#888888]',
+function sourceColor(source: string): string {
+  let hash = 0
+  for (let i = 0; i < source.length; i++)
+    hash = source.charCodeAt(i) + ((hash << 5) - hash)
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 80%, 55%)`
 }
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -38,7 +39,7 @@ export default memo(function PasteCard(props: Props) {
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2.5">
-          <span className={`w-2 h-2 rounded-full shrink-0 ${SOURCE_DOTS[source] || 'bg-[#888888]'}`} />
+          <span style={{ backgroundColor: sourceColor(source) }} className="w-2 h-2 rounded-full shrink-0" />
           <div>
             <div className="text-sm font-medium text-[#e8e8e8]">{SOURCE_NAMES[source] || source}</div>
             <div className="text-[11px] text-[#666666] mt-0.5" style={{ fontFamily: 'var(--font-mono)' }}>{filename}</div>
