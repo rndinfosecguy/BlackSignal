@@ -21,6 +21,14 @@ STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 REINDEX_INTERVAL = int(os.environ.get("REINDEX_INTERVAL", "300"))
 
 
+def _parse_bool(v: str | None) -> bool | None:
+    """FastAPI's ``bool`` type treats ``'false'`` as ``True`` (non-empty string).
+    This helper parses query params correctly."""
+    if v is None:
+        return None
+    return v.lower() in ('1', 'true', 'yes')
+
+
 def normalize_fts_query(q: str) -> str | None:
     """Strip whitespace; wrap in FTS5 phrase quotes unless the query already
     uses FTS5 operators (*, ", (, )). Returns None for empty input."""
@@ -99,14 +107,14 @@ def api_stats(
     q: str = Query("", description="Search query"),
     source: str = Query(None, description="Source filter"),
     content_type: str = Query(None, description="Content type filter"),
-    has_secrets: bool = Query(None, description="Only pastes with secrets"),
+    has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
 ):
     return _get_stats_cached(
         normalize_fts_query(q),
         source,
         content_type,
-        has_secrets,
+        _parse_bool(has_secrets),
         tuple(secret_type),
     )
 
@@ -131,7 +139,7 @@ def api_search(
     q: str = Query("", description="Search query"),
     source: str = Query(None, description="Source filter"),
     content_type: str = Query(None, description="Content type filter"),
-    has_secrets: bool = Query(None, description="Only pastes with secrets"),
+    has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
@@ -140,7 +148,7 @@ def api_search(
         query=normalize_fts_query(q),
         source=source,
         content_type=content_type,
-        has_secrets=has_secrets,
+        has_secrets=_parse_bool(has_secrets),
         secret_types=secret_type if secret_type else None,
         page=page,
         per_page=per_page,

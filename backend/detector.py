@@ -2,6 +2,10 @@ import re
 import os
 
 SEARCH_TERMS_FILE = os.environ.get("SEARCH_TERMS_FILE", "/app/configs/searchterms.txt")
+if not os.path.exists(SEARCH_TERMS_FILE):
+    local = os.path.join(os.path.dirname(__file__), "searchterms.txt")
+    if os.path.exists(local):
+        SEARCH_TERMS_FILE = local
 
 # ── Email:password ───────────────────────────────────────────────────────────
 # Require 6+ chars on the password side with at least one non-alpha character.
@@ -20,7 +24,7 @@ ASSIGN_CRED_RE = re.compile(
 # ── High-precision token patterns ────────────────────────────────────────────
 
 PRIVATE_KEY_RE = re.compile(
-    r'-----BEGIN\s+(RSA|DSA|EC|PGP|OPENSSH|PRIVATE)\s+KEY-----',
+    r'-----BEGIN\s+(?:(?:RSA|DSA|EC|OPENSSH|PGP)\s+)?PRIVATE\s+KEY-----',
     re.IGNORECASE
 )
 
@@ -44,8 +48,8 @@ URL_CONNECTION_RE = re.compile(
     re.IGNORECASE
 )
 
-# Onion: kept as-is (distinctive .onion TLD).
-ONION_RE = re.compile(r'[a-z2-7]{16,56}\.onion', re.IGNORECASE)
+# Onion: matches all lowercase alphanumeric onion v3 addresses.
+ONION_RE = re.compile(r'[a-z0-9]{16,56}\.onion', re.IGNORECASE)
 
 # Auth header: require a 20+ char token after bearer/basic.
 AUTH_HEADER_RE = re.compile(r'authorization:\s*(?:basic|bearer)\s+[^\s]{20,}', re.IGNORECASE)
@@ -112,7 +116,9 @@ load_search_terms()
 _HAS_TRIGGER = re.compile(
     r'[@=]|BEGIN |AKIA|gh[pousr]_|sk_live|rk_live|pk_live|AIza'
     r'|eyJ[A-Za-z0-9]|xox[baprs]-|mfa\.|://|\.onion|authorization:'
-    r'|INSERT\s+INTO|\d{13,}',
+    r'|INSERT\s+INTO|\d{13,}'
+    r'|\b\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d'
+    r'[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*\d[ -]*',
     re.IGNORECASE
 )
 
