@@ -145,7 +145,7 @@ Visit `http://localhost:9090`
 | GET | `/api/types` | Content-type distribution |
 | GET | `/api/secret-types` | Detected secret categories with counts |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
-| POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default) or `?mode=comprehensive` (no size limit) |
+| POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
 | GET | `/api/version` | App version: `{ version: "1.0.0" }` |
 
 Example:

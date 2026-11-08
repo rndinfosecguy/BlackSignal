@@ -289,6 +289,14 @@ def get_stats_filtered(conditions, params):
     }
 
 
+def clear_all_data():
+    """Delete all indexed pastes and FTS entries — used for purge reindex."""
+    conn = get_conn()
+    conn.execute("DELETE FROM pastes")
+    conn.execute("DELETE FROM pastes_fts")
+    conn.commit()
+
+
 def get_indexed_ids():
     conn = get_conn()
     rows = conn.execute("SELECT id FROM pastes").fetchall()

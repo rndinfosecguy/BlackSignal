@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, get_paste_by_id, get_sources, \
-    get_content_types, get_secret_types, get_stats, get_stats_filtered
+    get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data
 from scheduler import index_all_pastes, start_scheduler, get_index_progress
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -188,9 +188,13 @@ def api_index_status():
 
 
 @app.post("/api/reindex")
-def api_reindex(mode: str = Query("standard", description="'standard' (200K limit) or 'comprehensive' (no limit)")):
+def api_reindex(mode: str = Query("standard", description="'standard', 'comprehensive', or 'purge'")):
     clear_cache()
-    scan_limit = 0 if mode == "comprehensive" else None
+    if mode == "purge":
+        clear_all_data()
+        scan_limit = None
+    else:
+        scan_limit = 0 if mode == "comprehensive" else None
     threading.Thread(target=index_all_pastes, daemon=True, kwargs={"scan_limit": scan_limit}).start()
     return {"status": "started", "mode": mode}
 

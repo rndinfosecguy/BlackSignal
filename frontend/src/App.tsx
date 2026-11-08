@@ -31,8 +31,8 @@ export default function App() {
   const [activeSecretTypes, setActiveSecretTypes] = useState<string[]>([])
   const [hasSecrets, setHasSecrets] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
-  const [showReindexDialog, setShowReindexDialog] = useState(false)
   const [currentTab, setCurrentTab] = useState('dashboard')
+  const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
 
   const applyAll = useCallback((overrides: Overrides) => {
     const filterChanged =
@@ -149,9 +149,8 @@ export default function App() {
               className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Pastes
             </button>
-            <button onClick={() => { document.body.style.overflow = 'hidden'; setShowReindexDialog(true) }}
-              className="text-sm px-4 py-2 text-[#555555] hover:text-[#777777] transition-all cursor-pointer"
-              title="Trigger a full re-index of all paste files">
+            <button onClick={() => setCurrentTab('reindex')}
+              className={`text-sm px-4 py-2 ${currentTab === 'reindex' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Reindex
             </button>
           </div>
@@ -282,35 +281,80 @@ export default function App() {
             </div>
           )}
 
-          {showReindexDialog && (
-            <div onClick={() => { setShowReindexDialog(false); document.body.style.overflow = '' }}
-              className="fixed inset-0 z-40 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
+          {confirmReindex && (
+            <div onClick={() => setConfirmReindex(null)}
+              className="fixed inset-0 z-40 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm p-4">
               <div onClick={e => e.stopPropagation()}
-                className="bg-[#131313] border border-[#222222] rounded-xl w-full max-w-sm p-6">
-                <div className="text-sm text-[#e8e8e8] font-medium mb-1">Reindex all pastes</div>
-                <div className="text-[11px] text-[#555555] mb-4">Choose the indexing mode:</div>
-                <button onClick={() => { document.body.style.overflow = ''; setShowReindexDialog(false); triggerReindex('standard') }}
-                  className="w-full text-sm px-4 py-2 rounded-md border border-[#222222] text-[#00e5ff] hover:bg-[#00e5ff]/5 transition-all cursor-pointer mb-2">
-                  Standard — fast (200K limit per file)
-                </button>
-                <details className="text-[11px] text-[#555555]">
-                  <summary className="cursor-pointer text-[#ffd700]">Comprehensive — scan everything</summary>
-                  <div className="mt-2 text-[#777777] leading-relaxed">
-                    Disables the file size limit and scans the full content of every paste.
-                    The additional detections depend on your data — pastes with many large files
-                    will benefit more. It can take significantly longer; for large datasets it
-                    could take hours.
-                  </div>
-                  <button onClick={() => { document.body.style.overflow = ''; setShowReindexDialog(false); triggerReindex('comprehensive') }}
-                    className="w-full mt-3 text-sm px-4 py-2 rounded-md border border-[#ffd700] text-[#ffd700] hover:bg-[#ffd700]/5 transition-all cursor-pointer">
-                    Start comprehensive reindex
-                  </button>
-                </details>
-                <button onClick={() => { document.body.style.overflow = ''; setShowReindexDialog(false) }}
-                  className="w-full mt-3 text-xs px-4 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#666666] transition-all cursor-pointer">
-                  Cancel
-                </button>
+                className="bg-[#131313] border border-[#222222] rounded-xl w-full max-w-sm p-6 text-center">
+                {(() => {
+                  const mode = confirmReindex
+                  const accent = mode === 'purge' ? '#ff004d' : mode === 'comprehensive' ? '#ffd700' : '#00e5ff'
+                  const title = mode === 'purge' ? 'Purge all data?' : mode === 'comprehensive' ? 'Comprehensive reindex?' : 'Standard reindex?'
+                  const desc = mode === 'purge'
+                    ? 'All indexed data will be permanently deleted. A fresh reindex will start from scratch.'
+                    : mode === 'comprehensive'
+                      ? 'All large files will be re-scanned without size limits. This may take a long time.'
+                      : 'Only new paste files will be indexed. Already indexed files are skipped.'
+                  return (
+                    <>
+                    <div className="text-sm font-medium mb-3" style={{ color: accent }}>{title}</div>
+                    <div className="text-xs text-[#555555] mb-5">{desc}</div>
+                    <div className="flex items-center gap-3 justify-center">
+                      <button onClick={() => { setConfirmReindex(null); triggerReindex(mode) }}
+                        className="text-sm px-5 py-2 rounded-md transition-all cursor-pointer"
+                        style={{ border: `1px solid ${accent}`, color: accent, backgroundColor: 'transparent' }}>
+                        Yes, start reindex
+                      </button>
+                      <button onClick={() => setConfirmReindex(null)}
+                        className="text-xs px-4 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#666666] transition-all cursor-pointer">
+                        Cancel
+                      </button>
+                    </div>
+                    </>
+                  )
+                })()}
               </div>
+            </div>
+          )}
+          {currentTab === 'reindex' && (
+            <div className="space-y-5">
+              <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 cursor-pointer hover:bg-[#00e5ff]/5 transition-all"
+                onClick={() => setConfirmReindex('standard')}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-[#00e5ff]">Standard reindex</div>
+                    <div className="text-xs text-[#555555] mt-1">200K limit per file — quick, respects size limits</div>
+                  </div>
+                  <span className="text-[#00e5ff] text-lg">▶</span>
+                </div>
+              </div>
+
+              <details className="bg-[#131313] border border-[#222222] rounded-lg p-5 open:border-[#ffd700]">
+                <summary className="text-sm font-medium text-[#ffd700] cursor-pointer">Comprehensive reindex</summary>
+                <div className="mt-3 text-xs text-[#777777] leading-relaxed">
+                  Disables the file size limit and scans the full content of every paste.
+                  The additional detections depend on your data — pastes with many large files
+                  will benefit more. It can take significantly longer; for large datasets it
+                  could take hours.
+                </div>
+                <button onClick={() => setConfirmReindex('comprehensive')}
+                  className="w-full mt-3 text-sm px-4 py-2 rounded-md border border-[#ffd700] text-[#ffd700] hover:bg-[#ffd700]/5 transition-all cursor-pointer">
+                  Start comprehensive reindex
+                </button>
+              </details>
+
+              <details className="bg-[#131313] border border-[#222222] rounded-lg p-5">
+                <summary className="text-sm font-medium text-[#ff004d] cursor-pointer">Purge & reindex</summary>
+                <div className="mt-3 text-xs text-[#ff004d]/80 leading-relaxed">
+                  Permanently deletes all indexed data from the database and starts a
+                  fresh reindex from scratch. This cannot be undone. Only use this if
+                  you want to completely rebuild the index.
+                </div>
+                <button onClick={() => setConfirmReindex('purge')}
+                  className="w-full mt-3 text-sm px-4 py-2 rounded-md border border-[#ff004d] text-[#ff004d] hover:bg-[#ff004d]/5 transition-all cursor-pointer">
+                  Execute purge
+                </button>
+              </details>
             </div>
           )}
           <footer className="mt-10 pt-5 border-t border-[#1a1a1a] flex items-center justify-between gap-4">
