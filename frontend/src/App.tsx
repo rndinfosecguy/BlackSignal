@@ -22,7 +22,7 @@ export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
-    applyFilters, triggerReindex,
+    applyFilters, fetchStats, triggerReindex,
   } = usePastes()
 
   const [query, setQuery] = useState('')
@@ -141,11 +141,11 @@ export default function App() {
           </header>
 
           <div className="flex items-center gap-0 mb-5 border-b border-[#222222]">
-            <button onClick={() => setCurrentTab('dashboard')}
+            <button onClick={() => { fetchStats({}); setCurrentTab('dashboard') }}
               className={`text-sm px-4 py-2 ${currentTab === 'dashboard' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Dashboard
             </button>
-            <button onClick={() => setCurrentTab('pastes')}
+            <button onClick={() => { fetchStats({ q: query, source: activeSource, type: activeType, secretTypes: activeSecretTypes.length > 0 ? activeSecretTypes : undefined, hasSecrets }); setCurrentTab('pastes') }}
               className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Pastes
             </button>

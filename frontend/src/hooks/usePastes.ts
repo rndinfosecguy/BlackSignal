@@ -163,7 +163,7 @@ export function usePastes() {
   return {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
-    applyFilters, triggerReindex,
+    applyFilters, fetchStats, triggerReindex,
   }
 }
 
