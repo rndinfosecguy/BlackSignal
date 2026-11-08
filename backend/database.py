@@ -42,9 +42,15 @@ def build_filter_conditions(
         conditions.append("p.has_secrets = ?")
         params.append(1 if has_secrets else 0)
     if secret_types:
-        clauses = ["p.secret_types LIKE ?" for _ in secret_types]
-        conditions.append(f"({' OR '.join(clauses)})")
-        params.extend([f'%{st}%' for st in secret_types])
+        st_clauses = []
+        for st in secret_types:
+            # Match exact token within comma-separated list — not substrings
+            st_clauses.append(
+                "(p.secret_types LIKE ? OR p.secret_types LIKE ?"
+                " OR p.secret_types LIKE ? OR p.secret_types LIKE ?)"
+            )
+            params.extend([f'{st},%', f'%,{st},%', f'%,{st}', st])
+        conditions.append(f"({' OR '.join(st_clauses)})")
     return conditions, params
 
 
