@@ -166,6 +166,13 @@ export default function PasteDetail({ id, onClose }: Props) {
     return paste.content.split('\n').length
   }, [paste, contentVisible])
 
+  // Set of line numbers that have detected secrets (for inline highlighting).
+  const secretLines = useMemo(() => {
+    const s = new Set<number>()
+    if (paste?.secrets_detail) paste.secrets_detail.forEach(d => s.add(d.line))
+    return s
+  }, [paste])
+
   return (
     <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
       <div onClick={e => e.stopPropagation()} className="bg-[#0d0d0d] border border-[#222222] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
@@ -242,6 +249,7 @@ export default function PasteDetail({ id, onClose }: Props) {
                   <code
                     key={i}
                     className="hljs block whitespace-pre"
+                    style={secretLines.has(i + 1) ? { borderLeft: '2px solid rgba(255,0,77,0.5)', backgroundColor: 'rgba(255,0,77,0.08)' } : undefined}
                     dangerouslySetInnerHTML={{ __html: lineHtml || ' ' }}
                   />
                 ))}

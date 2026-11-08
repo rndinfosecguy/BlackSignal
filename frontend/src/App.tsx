@@ -10,6 +10,14 @@ import type { FilterState } from './hooks/usePastes'
 
 type Overrides = Partial<FilterState>
 
+function sourceColor(source: string): string {
+  let hash = 0
+  for (let i = 0; i < source.length; i++)
+    hash = source.charCodeAt(i) + ((hash << 5) - hash)
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 80%, 55%)`
+}
+
 export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
@@ -24,6 +32,7 @@ export default function App() {
   const [hasSecrets, setHasSecrets] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [showReindexDialog, setShowReindexDialog] = useState(false)
+  const [currentTab, setCurrentTab] = useState('dashboard')
 
   const applyAll = useCallback((overrides: Overrides) => {
     const filterChanged =
@@ -88,6 +97,12 @@ export default function App() {
     ? Math.round((indexStatus.current / indexStatus.total) * 100)
     : 0
 
+  // Dashboard computed values
+  const topSecretType = secretTypes
+    .filter(st => st.count > 0)
+    .sort((a: any, b: any) => b.count - a.count)[0]
+  const totalDetections = secretTypes.reduce((sum: number, st: any) => sum + (st.count || 0), 0)
+
   return (
     <div className="min-h-screen bg-[#0d0d0d]">
       {indexing ? (
@@ -122,47 +137,150 @@ export default function App() {
             <div className="flex items-center gap-6">
               <img src="/bs_logo.png" alt="BlackSignal" className="h-16 shrink-0" />
               <StatsDashboard stats={stats} />
-              <button onClick={() => { document.body.style.overflow = 'hidden'; setShowReindexDialog(true) }}
-                className="shrink-0 text-[11px] px-2.5 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all cursor-pointer"
-                title="Trigger a full re-index of all paste files">
-                Reindex
-              </button>
             </div>
           </header>
 
-          <div className="mb-6 space-y-4">
-            <SearchBar onSearch={handleSearch} loading={loading} />
-            <FilterChips
-              sources={sources}
-              types={types}
-              secretTypes={secretTypes}
-              activeSource={activeSource}
-              activeType={activeType}
-              activeSecretTypes={activeSecretTypes}
-              hasSecrets={hasSecrets}
-              onSourceChange={handleSourceChange}
-              onTypeChange={handleTypeChange}
-              onSecretTypeToggle={handleSecretTypeToggle}
-              onSecretTypeClear={handleSecretTypeClear}
-              onHasSecretsToggle={handleHasSecretsToggle}
-            />
+          <div className="flex items-center gap-0 mb-5 border-b border-[#222222]">
+            <button onClick={() => setCurrentTab('dashboard')}
+              className={`text-sm px-4 py-2 ${currentTab === 'dashboard' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
+              Dashboard
+            </button>
+            <button onClick={() => setCurrentTab('pastes')}
+              className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
+              Pastes
+            </button>
+            <button onClick={() => { document.body.style.overflow = 'hidden'; setShowReindexDialog(true) }}
+              className="text-sm px-4 py-2 text-[#555555] hover:text-[#777777] transition-all cursor-pointer"
+              title="Trigger a full re-index of all paste files">
+              Reindex
+            </button>
           </div>
 
-          <div className="space-y-3">
-            {loading && pastes.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-[#555555]">Loading pastes...</div>
-            ) : error ? (
-              <div className="flex items-center justify-center h-32"><span className="text-[#ff004d]">Error: {error}</span></div>
-            ) : pastes.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-[#555555]">No results found</div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {pastes.map(p => <PasteCard key={p.id} {...p} onClick={setDetailId} />)}
+          {currentTab === 'pastes' && (
+            <>
+            <div className="mb-6 space-y-4">
+              <SearchBar onSearch={handleSearch} loading={loading} />
+              <FilterChips
+                sources={sources}
+                types={types}
+                secretTypes={secretTypes}
+                activeSource={activeSource}
+                activeType={activeType}
+                activeSecretTypes={activeSecretTypes}
+                hasSecrets={hasSecrets}
+                onSourceChange={handleSourceChange}
+                onTypeChange={handleTypeChange}
+                onSecretTypeToggle={handleSecretTypeToggle}
+                onSecretTypeClear={handleSecretTypeClear}
+                onHasSecretsToggle={handleHasSecretsToggle}
+              />
+            </div>
+
+            <div className="space-y-3">
+              {loading && pastes.length === 0 ? (
+                <div className="flex items-center justify-center h-32 text-[#555555]">Loading pastes...</div>
+              ) : error ? (
+                <div className="flex items-center justify-center h-32"><span className="text-[#ff004d]">Error: {error}</span></div>
+              ) : pastes.length === 0 ? (
+                <div className="flex items-center justify-center h-32 text-[#555555]">No results found</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {pastes.map(p => <PasteCard key={p.id} {...p} onClick={setDetailId} />)}
+                </div>
+              )}
+            </div>
+
+            <Pagination page={page} totalPages={totalPages} total={total} onChange={handlePageChange} />
+            </>
+          )}
+
+          {currentTab === 'dashboard' && stats && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-3 gap-5">
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 text-center">
+                  <div className="text-xs text-[#888888] mb-2">Individual detections</div>
+                  <div className="text-3xl font-semibold text-[#ff004d]">{totalDetections.toLocaleString()}</div>
+                  <div className="text-[11px] text-[#555555] mt-1">
+                    in {stats.with_secrets.toLocaleString()} pastes
+                    {stats.with_secrets > 0 ? `(avg ${(totalDetections / stats.with_secrets).toFixed(1)} per paste)` : ''}
+                  </div>
+                </div>
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-5">
+                  <div className="text-xs text-[#888888] mb-2">Most common secret</div>
+                  <div className="text-sm font-semibold text-[#ffd700] mt-1">{topSecretType?.type || '—'}</div>
+                  <div className="text-[11px] text-[#555555] mt-1">
+                    {topSecretType ? topSecretType.count.toLocaleString() + ' occurrences' : 'No secrets detected'}
+                  </div>
+                </div>
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 text-center">
+                  <div className="text-xs text-[#888888] mb-2">Password density</div>
+                  <div className="text-3xl font-semibold text-[#ff004d]">
+                    {stats.with_secrets > 0 ? Math.round(stats.with_passwords / stats.with_secrets * 100) : 0}%
+                  </div>
+                  <div className="text-[11px] text-[#555555] mt-1">
+                    of pastes with secrets have email:password combos
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
 
-          <Pagination page={page} totalPages={totalPages} total={total} onChange={handlePageChange} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
+                  <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Sources</div>
+                  {sources.filter(s => s.count > 0).slice(0, 10).map(s => {
+                    const pct = stats.total > 0 ? (s.count / stats.total * 100) : 0
+                    return (
+                      <div key={s.source} className="flex items-center gap-2 mb-1.5">
+                        <span style={{ backgroundColor: sourceColor(s.source) }} className="w-2 h-2 rounded-full shrink-0" />
+                        <span className="text-xs text-[#777777]">{s.source}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-[#222222] overflow-hidden">
+                          <div className="h-full bg-[#00e5ff] rounded-full" style={{ width: `${pct}%`, maxWidth: '100%' }} />
+                        </div>
+                        <span className="text-xs text-[#555555]">{s.count.toLocaleString()}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
+                  <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Content Types</div>
+                  {types.filter(t => t.count > 0).slice(0, 10).map(t => {
+                    const pct = stats.total > 0 ? (t.count / stats.total * 100) : 0
+                    return (
+                      <div key={t.content_type} className="flex items-center gap-2 mb-1.5">
+                        <span className="w-2 h-2 rounded-full bg-[#555555]" />
+                        <span className="text-xs text-[#777777]">{t.content_type}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-[#222222] overflow-hidden">
+                          <div className="h-full bg-[#00ff41] rounded-full" style={{ width: `${pct}%`, maxWidth: '100%' }} />
+                        </div>
+                        <span className="text-xs text-[#555555]">{t.count.toLocaleString()}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
+                <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Detected Secret Types</div>
+                {(() => {
+                  const withCounts = secretTypes.filter(st => st.count > 0)
+                  return withCounts.length > 0 ? withCounts.slice(0, 15).map(st => {
+                    const hue = Math.abs(st.type.split('').reduce((h: number, c: string) => c.charCodeAt(0) + ((h << 5) - h), 0)) % 360
+                    const pct = totalDetections > 0 ? st.count / totalDetections * 100 : 0
+                    return (
+                      <div key={st.type} className="flex items-center gap-2 mb-1.5">
+                        <span style={{ backgroundColor: `hsl(${hue}, 80%, 55%)` }} className="w-2 h-2 rounded-full shrink-0" />
+                        <span className="text-xs text-[#777777]">{st.type}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-[#222222] overflow-hidden">
+                          <div className="h-full bg-[#ff004d] rounded-full" style={{ width: `${pct}%`, maxWidth: '100%' }} />
+                        </div>
+                        <span className="text-xs text-[#555555]">{st.count.toLocaleString()}</span>
+                      </div>
+                    )
+                  }) : <div className="text-xs text-[#555555]">No secrets detected yet</div>
+                })()}
+              </div>
+            </div>
+          )}
 
           {showReindexDialog && (
             <div onClick={() => { setShowReindexDialog(false); document.body.style.overflow = '' }}
@@ -202,9 +320,7 @@ export default function App() {
               <span className="text-[#555555]">FOR RESEARCH ONLY</span>
               {version && <><span className="text-[#555555]">|</span><span>{version}</span></>}
             </div>
-            <div className="text-[12px] text-[#444444]">
-              {stats ? `${stats.total.toLocaleString()} pastes indexed` : ''}
-            </div>
+            
           </footer>
         </div>
       )}
