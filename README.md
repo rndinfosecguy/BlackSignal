@@ -17,9 +17,11 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 - **Search & browse** — full-text search (SQLite FTS5) across pastes with pagination
 - **Filtering** — by source site, detected content type, and specific sensitive-data categories
 - **Sensitive-data detection** — automatic regex/keyword scanning for:
-  `email:password`, `credential_assignment`, `private_key`, `aws_key`, `github_token`, `stripe_key`, `google_api_key`, `jwt_token`, `slack_token`, `discord_token`, `connection_string`, `onion_address`, `auth_header`, `credit_card`, `sql_user_insert` + custom search terms
-- **Secret-first detail view** — detected secrets are shown at the top of a paste, with the full content collapsed by default
+  `email:password`, `credential_assignment`, `private_key`, `aws_key`, `github_token`, `github_pat`, `stripe_key`, `google_api_key`, `jwt_token`, `slack_token`, `discord_token`, `connection_string`, `onion_address`, `auth_header`, `credit_card`, `sql_user_insert`, `mysql_connect`, `wp_config`, `client_secret` + custom search terms via `backend/searchterms.txt`
+- **Secret-first detail view** — detected secrets are shown at the top of a paste, with the full content collapsed by default. Inline highlights mark secret-bearing lines in the code view.
 - **Syntax highlighting** — highlight.js for different coding languages
+- **Dashboard** — overview tab showing detection rates, source/type distributions, and per-type breakdowns
+- **Comprehensive reindex** — optional full-content scan mode (bypasses size limits) for deep inspection of large files
 - **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
 - **Periodic re-indexing** — automatic daily scan for new/changed pastes
 
@@ -63,7 +65,7 @@ BlackSignal/
 │   ├── indexer.py       # Walk raw_pastes/, detect content types
 │   ├── detector.py      # Sensitive-data regex/keyword patterns
 │   ├── scheduler.py     # Periodic re-indexing (APScheduler), threaded pipeline
-│   └── searchterms.txt  # Custom search terms (Scavenger-style)
+│   └── searchterms.txt  # Custom search terms — add terms here & reindex to apply
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx          # Main UI (filter state, indexing overlay)
@@ -144,7 +146,7 @@ Visit `http://localhost:9090`
 | GET | `/api/secret-types` | Detected secret categories with counts |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default) or `?mode=comprehensive` (no size limit) |
-| GET | `/api/version` | App version: `{ version: "0.10.0" }` |
+| GET | `/api/version` | App version: `{ version: "1.0.0" }` |
 
 Example:
 
