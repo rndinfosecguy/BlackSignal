@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import hljs from 'highlight.js/lib/core'
 import json from 'highlight.js/lib/languages/json'
 import xml from 'highlight.js/lib/languages/xml'
@@ -12,6 +12,7 @@ import java from 'highlight.js/lib/languages/java'
 import c from 'highlight.js/lib/languages/c'
 import markdown from 'highlight.js/lib/languages/markdown'
 import { fetchPasteDetail } from '../hooks/usePastes'
+import { formatSize, splitHighlighted } from '../lib/utils'
 
 hljs.registerLanguage('json', json)
 hljs.registerLanguage('xml', xml)
@@ -33,50 +34,6 @@ const TYPE_LANG_MAP: Record<string, string> = {
 
 const SCAN_LIMIT = 200000
 
-/**
- * Split highlighted HTML into per-line, tag-balanced chunks so each line can be
- * rendered separately (for the gutter) without leaking open <span> tags across
- * line boundaries.
- */
-function splitHighlighted(html: string): string[] {
-  const lines: string[] = []
-  const stack: string[] = []      // currently open <span ...> opening strings
-  let buf = ''
-
-  const flush = () => {
-    // close all open spans for this line, then re-open for the next
-    lines.push(buf + stack.map(() => '</span>').join(''))
-    buf = stack.join('')
-  }
-
-  let i = 0
-  while (i < html.length) {
-    const ch = html[i]
-    if (ch === '<') {
-      const end = html.indexOf('>', i)
-      if (end === -1) break
-      const tag = html.slice(i, end + 1)
-      if (tag.startsWith('</span')) {
-        stack.pop()
-      } else if (tag.startsWith('<span')) {
-        stack.push(tag)
-      }
-      buf += tag
-      i = end + 1
-      continue
-    }
-    if (ch === '\n') {
-      flush()
-      i += 1
-      continue
-    }
-    buf += ch
-    i += 1
-  }
-  flush()
-  return lines
-}
-
 interface Secret { type: string; line: number; match: string }
 interface PasteDetailData {
   id: string; filename: string; source: string; content: string
@@ -85,31 +42,28 @@ interface PasteDetailData {
 }
 interface Props { id: string; onClose: () => void }
 
-function formatSize(bytes: number): string {
-  if (bytes <= 0) return 'empty'
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
-}
-
 export default function PasteDetail({ id, onClose }: Props) {
   const [paste, setPaste] = useState<PasteDetailData | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [copied, setCopied] = useState(false)
   const [contentVisible, setContentVisible] = useState(true)
+  const fetchReqId = useRef(0)
 
   useEffect(() => {
+    const reqId = ++fetchReqId.current
     setLoading(true)
     setFetchError(false)
     document.body.style.overflow = 'hidden'
     fetchPasteDetail(id).then(p => {
+      if (fetchReqId.current !== reqId) return  // stale response
       setPaste(p)
       setLoading(false)
       if (!p) setFetchError(true)
       else if (p.secrets_detail && p.secrets_detail.length > 0) setContentVisible(false)
       else setContentVisible(true)
     }).catch(() => {
+      if (fetchReqId.current !== reqId) return
       setLoading(false)
       setFetchError(true)
     })

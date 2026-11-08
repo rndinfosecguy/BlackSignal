@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { sourceColor } from './lib/utils'
 import SearchBar from './components/SearchBar'
 import FilterChips from './components/FilterChips'
 import PasteCard from './components/PasteCard'
@@ -9,14 +10,6 @@ import { usePastes } from './hooks/usePastes'
 import type { FilterState } from './hooks/usePastes'
 
 type Overrides = Partial<FilterState>
-
-function sourceColor(source: string): string {
-  let hash = 0
-  for (let i = 0; i < source.length; i++)
-    hash = source.charCodeAt(i) + ((hash << 5) - hash)
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 80%, 55%)`
-}
 
 export default function App() {
   const {
@@ -184,7 +177,7 @@ export default function App() {
                 <div className="flex items-center justify-center h-32 text-[#555555]">No results found</div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {pastes.map(p => <PasteCard key={p.id} {...p} onClick={setDetailId} />)}
+                  {pastes.map(p => <PasteCard key={`${p.source}:${p.id}`} {...p} onClick={setDetailId} />)}
                 </div>
               )}
             </div>

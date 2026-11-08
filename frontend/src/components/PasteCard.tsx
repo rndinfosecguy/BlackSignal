@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { sourceColor, formatSize } from '../lib/utils'
 
 interface Props {
   id: string; filename: string; source: string; content_type: string; size: number
@@ -6,26 +7,11 @@ interface Props {
   onClick: (id: string) => void
 }
 
-function sourceColor(source: string): string {
-  let hash = 0
-  for (let i = 0; i < source.length; i++)
-    hash = source.charCodeAt(i) + ((hash << 5) - hash)
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 80%, 55%)`
-}
-
 const SOURCE_NAMES: Record<string, string> = {
   github:   'GitHub',
   pastebin: 'Pastebin',
   dpaste:   'Dpaste',
   pastesio: 'Pastes.io',
-}
-
-function formatSize(bytes: number): string {
-  if (bytes <= 0) return 'empty'
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
 
 export default memo(function PasteCard(props: Props) {

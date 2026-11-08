@@ -41,7 +41,7 @@ export default function SearchBar({ onSearch, loading }: Props) {
           <span className="text-[#555555] text-xs ml-2">searching...</span>
         )}
         <button
-          onClick={() => onSearch(value)}
+          onClick={() => { clearTimeout(timerRef.current); onSearch(value) }}
           className="text-xs px-3 py-1 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all ml-2"
         >
           Search

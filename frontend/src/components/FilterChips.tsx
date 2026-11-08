@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { sourceColor } from '../lib/utils'
 
 interface SourceCount { source: string; count: number }
 interface TypeCount { content_type: string; count: number }
@@ -13,14 +14,6 @@ interface Props {
   onSecretTypeToggle: (st: string) => void
   onSecretTypeClear: () => void
   onHasSecretsToggle: () => void
-}
-
-function sourceColor(source: string): string {
-  let hash = 0
-  for (let i = 0; i < source.length; i++)
-    hash = source.charCodeAt(i) + ((hash << 5) - hash)
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 80%, 55%)`
 }
 
 const ACTIVE = 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5'
