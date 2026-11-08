@@ -29,6 +29,15 @@ PRIVATE_KEY_RE = re.compile(
 )
 
 AWS_KEY_RE = re.compile(r'AKIA[0-9A-Z]{16}')
+
+def _is_low_entropy(s: str) -> bool:
+    """True if the string has 4+ consecutive identical characters (low entropy)."""
+    count = 1
+    for i in range(1, len(s)):
+        count = count + 1 if s[i] == s[i-1] else 1
+        if count >= 4:
+            return True
+    return False
 GITHUB_TOKEN_RE = re.compile(r'(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}')
 STRIPE_LIVE_RE = re.compile(r'(?:sk_live|rk_live|pk_live)_[A-Za-z0-9]{24,}')
 GOOGLE_API_RE = re.compile(r'AIza[0-9A-Za-z_-]{35}')
@@ -72,8 +81,13 @@ MYSQLI_CONNECT_RE = re.compile(
     re.IGNORECASE
 )
 
-# WordPress config file reference.
-WPCONFIG_RE = re.compile(r'wp-config\.php', re.IGNORECASE)
+# WordPress config file — matches actual WP-specific define() calls within the file,
+# not just filename mentions.
+WPCONFIG_RE = re.compile(
+    r"""define\s*\(\s*['"](?:DB_NAME|DB_USER|DB_PASSWORD|DB_HOST|AUTH_KEY|SECURE_AUTH_KEY|LOGGED_IN_KEY|NONCE_KEY|AUTH_SALT|SECURE_AUTH_SALT|LOGGED_IN_SALT|NONCE_SALT|WP_LOCALE|WP_DEBUG|DB_CHARSET|DB_COLLATE)['"]"""
+    r"""|\$table_prefix\s*=""",
+    re.IGNORECASE
+)
 
 # OAuth client_secret assignment.
 CLIENT_SECRET_RE = re.compile(
@@ -137,7 +151,8 @@ _HAS_TRIGGER = re.compile(
     r'|INSERT\s+INTO|\d{13,}'
     r'|\b\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d'
     r'[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*'
-    r'|github_pat_|mysqli_connect|wp-config|client_secret',
+    r'|github_pat_|mysqli_connect|client_secret'
+    r'|define\s*\(|table_prefix',
     re.IGNORECASE
 )
 
@@ -190,9 +205,21 @@ def scan_content(content, scan_limit=None):
                     # Skip if preceded by '.' — decimal fraction, not a CC
                     if match.start() > 0 and line[match.start() - 1] == '.':
                         continue
+                    # Skip if preceded by a letter — part of SVG path or code identifier
+                    if match.start() > 0 and line[match.start() - 1].isalpha():
+                        continue
+                    # Skip if match has 5+ small groups separated by spaces (SVG coords, not CC)
+                    parts = group.split(' ')
+                    if len(parts) >= 5 and all(len(p) <= 3 for p in parts):
+                        continue
                     # Skip if preceded by '-' and match contains '-' — embedded in SID/ID
                     if '-' in group and match.start() > 0 and line[match.start() - 1] == '-':
                         continue
+                    # Skip if followed by '-' — inside a subtraction or negative number
+                    if match.end() < len(line) and line[match.end()] == '-':
+                        after = match.end() + 1
+                        if after < len(line) and line[after] in '(d':
+                            continue
                     digits = re.sub(r'[ -]', '', group)
                     if not _luhn_check(digits):
                         continue
@@ -230,7 +257,6 @@ def scan_content(content, scan_limit=None):
                         # Block if it contains param-style assignments (= followed by digit)
                         if re.search(r'=\d', pw_side):
                             continue
-                            continue
 
                 # ── Credential assignment: validate the value ─────────────
                 elif name == "credential_assignment":
@@ -246,11 +272,20 @@ def scan_content(content, scan_limit=None):
                     # Skip function calls (foo()) and property/method chains (foo.bar)
                     if '(' in value or '.' in value:
                         continue
+                    # Skip file paths (/path/to/file)
+                    if '/' in value:
+                        continue
                     # Skip shell variable references ($VAR, ${VAR})
                     if '$' in value or '{' in value:
                         continue
                     # Skip if value is all-same-character (masked/placeholder)
                     if len(set(value)) == 1:
+                        continue
+
+                # ── AWS key: skip low-entropy matches (base64 artifacts) ──
+                elif name == "aws_key":
+                    # AKIA + 16 chars: total 20 chars, check suffix
+                    if len(group) > 4 and _is_low_entropy(group[4:]):
                         continue
 
                 # ── Auth header: skip variable references ─────────────────
