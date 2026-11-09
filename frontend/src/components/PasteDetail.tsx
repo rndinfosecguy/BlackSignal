@@ -32,7 +32,7 @@ const TYPE_LANG_MAP: Record<string, string> = {
   c: 'c', markdown: 'markdown', csv: 'bash', sql: 'sql', css: 'css',
 }
 
-const SCAN_LIMIT = 200000
+const SCAN_LIMIT = 200000  // must match backend/detector.py scan_content() default
 
 interface Secret { type: string; line: number; match: string }
 interface PasteDetailData {

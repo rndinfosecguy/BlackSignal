@@ -256,11 +256,10 @@ export default function App() {
                 {(() => {
                   const withCounts = secretTypes.filter(st => st.count > 0)
                   return withCounts.length > 0 ? withCounts.slice(0, 15).map(st => {
-                    const hue = Math.abs(st.type.split('').reduce((h: number, c: string) => c.charCodeAt(0) + ((h << 5) - h), 0)) % 360
                     const pct = totalDetections > 0 ? st.count / totalDetections * 100 : 0
                     return (
                       <div key={st.type} className="flex items-center gap-2 mb-1.5">
-                        <span style={{ backgroundColor: `hsl(${hue}, 80%, 55%)` }} className="w-2 h-2 rounded-full shrink-0" />
+                        <span style={{ backgroundColor: sourceColor(st.type) }} className="w-2 h-2 rounded-full shrink-0" />
                         <span className="text-xs text-[#777777]">{st.type}</span>
                         <div className="flex-1 h-1.5 rounded-full bg-[#222222] overflow-hidden">
                           <div className="h-full bg-[#ff004d] rounded-full" style={{ width: `${pct}%`, maxWidth: '100%' }} />
