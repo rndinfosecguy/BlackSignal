@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { sourceColor } from './lib/utils'
 import SearchBar from './components/SearchBar'
 import FilterChips from './components/FilterChips'
@@ -15,6 +15,7 @@ export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
+    lastReindexResult,
     applyFilters, fetchStats, triggerReindex,
   } = usePastes()
 
@@ -26,6 +27,18 @@ export default function App() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [currentTab, setCurrentTab] = useState('dashboard')
   const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
+  const [reindexToast, setReindexToast] = useState<string | null>(null)
+
+  // Watch for new reindex results — show a toast until dismissed
+  useEffect(() => {
+    if (!lastReindexResult) return
+    const parts: string[] = []
+    if (lastReindexResult.indexed > 0) parts.push(`${lastReindexResult.indexed.toLocaleString()} new`)
+    if (lastReindexResult.deleted > 0) parts.push(`${lastReindexResult.deleted.toLocaleString()} deleted`)
+    if (lastReindexResult.skipped > 0) parts.push(`${lastReindexResult.skipped.toLocaleString()} skipped`)
+    if (parts.length === 0) parts.push('no changes')
+    setReindexToast(`Reindex complete: ${parts.join(', ')}`)
+  }, [lastReindexResult])
 
   const applyAll = useCallback((overrides: Overrides) => {
     const filterChanged =
@@ -147,6 +160,13 @@ export default function App() {
               Reindex
             </button>
           </div>
+
+          {reindexToast && (
+            <div className="mb-4 bg-[#131313] border border-[#222222] rounded-lg px-4 py-3 flex items-center gap-3">
+              <div className="flex-1 text-xs text-[#555555]">{reindexToast}</div>
+              <button onClick={() => setReindexToast(null)} className="text-[#666666] hover:text-[#ff004d] text-sm transition-all leading-none cursor-pointer">&times;</button>
+            </div>
+          )}
 
           {currentTab === 'pastes' && (
             <>

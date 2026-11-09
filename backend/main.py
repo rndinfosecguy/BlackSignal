@@ -12,7 +12,7 @@ import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, get_paste_by_id, get_sources, \
     get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data
-from scheduler import index_all_pastes, start_scheduler, get_index_progress
+from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("blacksignal")
@@ -185,6 +185,11 @@ def api_version():
 @app.get("/api/index-status")
 def api_index_status():
     return get_index_progress()
+
+
+@app.get("/api/last-reindex")
+def api_last_reindex():
+    return get_last_reindex_result()
 
 
 @app.post("/api/reindex")

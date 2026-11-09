@@ -24,6 +24,13 @@ _index_progress = {
     "phase": "",
 }
 
+# Last reindex result — stored by index_all_pastes, read by /api/last-reindex.
+_last_reindex_result = {}
+
+
+def get_last_reindex_result():
+    return dict(_last_reindex_result)
+
 
 def get_index_progress():
     return dict(_index_progress)
@@ -230,7 +237,10 @@ def index_all_pastes(scan_limit=None):
         logger.info("Complete: %d new, %d deleted, %d total",
                     indexed_count, deleted_count, len(current_ids))
 
-        return {"indexed": indexed_count, "deleted": deleted_count, "total": len(current_ids)}
+        result = {"indexed": indexed_count, "deleted": deleted_count, "total": len(current_ids)}
+        _last_reindex_result.update(result)
+        _last_reindex_result["skipped"] = skipped_count
+        return result
     except Exception:
         logger.exception("Indexing failed")
     finally:

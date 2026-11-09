@@ -64,12 +64,14 @@ export function usePastes() {
   const [secretTypes, setSecretTypes] = useState<SecretTypeCount[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [version, setVersion] = useState('')
+  const [lastReindexResult, setLastReindexResult] = useState<{indexed: number; deleted: number; total: number; skipped: number} | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [indexStatus, setIndexStatus] = useState<IndexStatus>(defaultIndexStatus)
 
   const pastesReqId = useRef(0)
   const statsReqId = useRef(0)
   const runningRef = useRef(false)
+  const reindexTriggeredRef = useRef(false)
 
   const fetchPastes = useCallback(async (state: FilterState) => {
     const reqId = ++pastesReqId.current
@@ -112,10 +114,19 @@ export function usePastes() {
     let cancelled = false
     let timeout: ReturnType<typeof setTimeout>
     let dataLoaded = false
+    let wasRunning = false
 
     const poll = async () => {
       const data = await fetchJson<IndexStatus>(`${API_BASE}/index-status`)
       if (!cancelled && data) {
+        // If a manual reindex was triggered since the last poll, force wasRunning
+        // to true so we detect completion even if the poll missed the running window.
+        if (reindexTriggeredRef.current) {
+          reindexTriggeredRef.current = false
+          wasRunning = true
+        }
+        const justFinished = wasRunning && !data.running
+        wasRunning = data.running
         setIndexStatus(data)
         runningRef.current = data.running
         // Fetch initial data only once the indexer is idle
@@ -136,8 +147,16 @@ export function usePastes() {
             fetchStats({})
           }
         }
+        // Index just completed — refresh data and show result
+        if (justFinished && dataLoaded) {
+          fetchPastes({ page: 1 })
+          fetchStats({})
+          fetchJson<{indexed:number;deleted:number;total:number;skipped:number}>(`${API_BASE}/last-reindex`).then(last => {
+            if (!cancelled && last) setLastReindexResult(last)
+          })
+        }
       }
-      if (!cancelled) timeout = setTimeout(poll, 60000)
+      if (!cancelled) timeout = setTimeout(poll, data.running ? 5000 : 60000)
     }
 
     poll()
@@ -149,20 +168,22 @@ export function usePastes() {
   }, [fetchPastes, fetchStats])
 
   const triggerReindex = useCallback(async (mode: string = 'standard') => {
+    reindexTriggeredRef.current = true
     setIndexStatus({ running: true, current: 0, total: 0, phase: 'indexing' })
     runningRef.current = true
     fetch(`${API_BASE}/reindex?mode=${mode}`, { method: 'POST' }).catch(() => {})
     // Immediate status poll so the overlay shows real progress right away
     const status = await fetchJson<IndexStatus>(`${API_BASE}/index-status`)
-    if (status) {
+    if (status && status.running) {
       setIndexStatus(status)
-      runningRef.current = status.running
+      runningRef.current = true
     }
   }, [])
 
   return {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
+    lastReindexResult,
     applyFilters, fetchStats, triggerReindex,
   }
 }
