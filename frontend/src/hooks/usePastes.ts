@@ -151,12 +151,24 @@ export function usePastes() {
         if (justFinished && dataLoaded) {
           fetchPastes({ page: 1 })
           fetchStats({})
-          fetchJson<{indexed:number;deleted:number;total:number;skipped:number}>(`${API_BASE}/last-reindex`).then(last => {
-            if (!cancelled && last) setLastReindexResult(last)
+          Promise.all([
+            fetchJson<SourceCount[]>(`${API_BASE}/sources`),
+            fetchJson<TypeCount[]>(`${API_BASE}/types`),
+            fetchJson<SecretTypeCount[]>(`${API_BASE}/secret-types`),
+            fetchJson<{ version: string }>(`${API_BASE}/version`),
+            fetchJson<{indexed:number;deleted:number;total:number;skipped:number}>(`${API_BASE}/last-reindex`),
+          ]).then(([s, t, st, v, last]) => {
+            if (!cancelled) {
+              if (s) setSources(s)
+              if (t) setTypes(t)
+              if (st) setSecretTypes(st)
+              if (v) setVersion(v.version)
+              if (last) setLastReindexResult(last)
+            }
           })
         }
       }
-      if (!cancelled) timeout = setTimeout(poll, data.running ? 5000 : 60000)
+      if (!cancelled) timeout = setTimeout(poll, 60000)
     }
 
     poll()

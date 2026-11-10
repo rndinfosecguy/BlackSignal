@@ -162,8 +162,9 @@ export default function App() {
           </div>
 
           {reindexToast && (
-            <div className="mb-4 bg-[#131313] border border-[#222222] rounded-lg px-4 py-3 flex items-center gap-3">
-              <div className="flex-1 text-xs text-[#555555]">{reindexToast}</div>
+            <div className="mb-4 bg-[#131313] border border-[#222222] rounded-lg px-4 py-3 shadow-lg flex items-center gap-3"
+              style={{ borderLeft: '3px solid #00e5ff' }}>
+              <div className="flex-1 text-xs text-[#888888]">{reindexToast}</div>
               <button onClick={() => setReindexToast(null)} className="text-[#666666] hover:text-[#ff004d] text-sm transition-all leading-none cursor-pointer">&times;</button>
             </div>
           )}

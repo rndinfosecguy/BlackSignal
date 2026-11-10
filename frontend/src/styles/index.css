@@ -50,6 +50,9 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-faint);
 }
+::-webkit-scrollbar-corner {
+  background: var(--color-surface);
+}
 
 .hljs {
   background: transparent !important;

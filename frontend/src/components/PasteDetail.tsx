@@ -173,7 +173,7 @@ export default function PasteDetail({ id, onClose }: Props) {
           </div>
         )}
         
-        <div className="flex-1 overflow-auto px-4 pb-4">
+        <div className="flex-1 overflow-y-auto overflow-x-scroll px-4 pb-4">
           {loading ? (
             <div className="flex items-center justify-center h-32 text-[#555555]">Loading...</div>
           ) : fetchError ? (
@@ -184,7 +184,7 @@ export default function PasteDetail({ id, onClose }: Props) {
               </div>
             </div>
           ) : paste && contentVisible ? (
-            <div className="flex-1 min-w-0 overflow-x-auto">
+            <div className="flex-1 min-w-0">
                 {highlightedLines.map((lineHtml, i) => (
                   <div key={i} className="flex items-start">
                     <code
