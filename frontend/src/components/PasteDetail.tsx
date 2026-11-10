@@ -113,12 +113,7 @@ export default function PasteDetail({ id, onClose }: Props) {
     [highlighted],
   )
 
-  // Gutter line count — computed from raw content (same as scanner's split("\n"))
-  // so line numbers always match regardless of highlight.js output quirks.
-  const totalLines = useMemo(() => {
-    if (!paste || !contentVisible) return 0
-    return paste.content.split('\n').length
-  }, [paste, contentVisible])
+  
 
   // Set of line numbers that have detected secrets (for inline highlighting).
   const secretLines = useMemo(() => {
@@ -189,26 +184,30 @@ export default function PasteDetail({ id, onClose }: Props) {
               </div>
             </div>
           ) : paste && contentVisible ? (
-            <div className="flex">
-              <div
-                className="shrink-0 select-none text-right pr-3 mr-3 border-r border-[#222222] text-[#555555]"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7 }}
-              >
-                {Array.from({length: totalLines}).map((_, i) => (
-                  <div key={i}>{i + 1}</div>
-                ))}
-              </div>
-              <div className="flex-1 min-w-0 overflow-x-auto">
+            <div className="flex-1 min-w-0 overflow-x-auto">
                 {highlightedLines.map((lineHtml, i) => (
-                  <code
-                    key={i}
-                    className="hljs block whitespace-pre"
-                    style={secretLines.has(i + 1) ? { borderLeft: '2px solid rgba(255,0,77,0.5)', backgroundColor: 'rgba(255,0,77,0.08)' } : undefined}
-                    dangerouslySetInnerHTML={{ __html: lineHtml || ' ' }}
-                  />
+                  <div key={i} className="flex items-start">
+                    <code
+                      className="hljs block shrink-0 select-none text-right"
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 13,
+                        lineHeight: 1.7,
+                        color: '#555555',
+                        paddingRight: '0.75rem',
+                        marginRight: '0.75rem',
+                        borderRight: '1px solid #222222',
+                        ...(secretLines.has(i + 1) ? { borderLeft: '2px solid rgba(255,0,77,0.5)' } : {}),
+                      }}
+                    >{i + 1}</code>
+                    <code
+                      className="hljs block whitespace-pre flex-1 min-w-0"
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7 }}
+                      dangerouslySetInnerHTML={{ __html: lineHtml || ' ' }}
+                    />
+                  </div>
                 ))}
               </div>
-            </div>
           ) : paste ? null : null}
         </div>
       </div>
