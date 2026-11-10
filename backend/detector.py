@@ -218,7 +218,12 @@ def scan_content(content, scan_limit=None):
                     # Skip if followed by '-' — inside a subtraction or negative number
                     if match.end() < len(line) and line[match.end()] == '-':
                         after = match.end() + 1
-                        if after < len(line) and line[after] in '(d':
+                        if after < len(line) and (line[after].isdigit() or line[after] in '(d'):
+                            continue
+                    # Skip if match has '-' and a segment has 7+ digits (math, not CC)
+                    if '-' in group:
+                        segs = group.replace(' ', '').split('-')
+                        if any(len(s) >= 7 for s in segs):
                             continue
                     digits = re.sub(r'[ -]', '', group)
                     if not _luhn_check(digits):
@@ -252,7 +257,7 @@ def scan_content(content, scan_limit=None):
                         pw_side = group[colon_idx + 1:].strip()
                         # Block if the "password" side looks like a URL/path/proxy/config
                         # rather than a real credential
-                        if '?' in pw_side or '#' in pw_side or '/' in pw_side or pw_side.startswith('"'):
+                        if '?' in pw_side or '#' in pw_side or '/' in pw_side or pw_side.startswith('"') or '$' in pw_side:
                             continue
                         # Block if it contains param-style assignments (= followed by digit)
                         if re.search(r'=\d', pw_side):

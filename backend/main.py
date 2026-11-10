@@ -196,11 +196,13 @@ def api_last_reindex():
 def api_reindex(mode: str = Query("standard", description="'standard', 'comprehensive', or 'purge'")):
     clear_cache()
     if mode == "purge":
-        clear_all_data()
-        scan_limit = None
+        def _purge():
+            clear_all_data()
+            index_all_pastes(scan_limit=None)
+        threading.Thread(target=_purge, daemon=True).start()
     else:
         scan_limit = 0 if mode == "comprehensive" else None
-    threading.Thread(target=index_all_pastes, daemon=True, kwargs={"scan_limit": scan_limit}).start()
+        threading.Thread(target=index_all_pastes, daemon=True, kwargs={"scan_limit": scan_limit}).start()
     return {"status": "started", "mode": mode}
 
 
