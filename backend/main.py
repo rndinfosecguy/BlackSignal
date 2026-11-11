@@ -12,7 +12,7 @@ import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, get_paste_by_id, get_sources, \
     get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data
-from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result
+from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("blacksignal")
@@ -197,6 +197,7 @@ def api_reindex(mode: str = Query("standard", description="'standard', 'comprehe
     clear_cache()
     if mode == "purge":
         def _purge():
+            set_index_running(True, phase="purging database")
             clear_all_data()
             index_all_pastes(scan_limit=None)
         threading.Thread(target=_purge, daemon=True).start()

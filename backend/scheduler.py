@@ -36,6 +36,12 @@ def get_index_progress():
     return dict(_index_progress)
 
 
+def set_index_running(running: bool, phase: str = ""):
+    """Set the running state and phase of the indexer.
+    Used by purge to mark itself running before the long clear_all_data() call."""
+    _index_progress.update(running=running, current=0, total=0, phase=phase)
+
+
 def _process_single(f, scan_limit=None):
     """Read, detect and scan a single file — runs in a worker thread.
     scan_limit — max chars to scan (None = default 200K, 0 = unlimited)."""
