@@ -147,7 +147,7 @@ Visit `http://localhost:9090`
 | GET | `/api/secret-types` | Detected secret categories with counts |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
-| GET | `/api/version` | App version: `{ version: "1.2.1" }` |
+| GET | `/api/version` | App version: `{ version: "1.3.0" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
 
 Example:
