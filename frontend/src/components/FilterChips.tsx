@@ -9,15 +9,19 @@ interface Props {
   sources: SourceCount[]; types: TypeCount[]; secretTypes: SecretTypeCount[]
   activeSource: string; activeType: string; activeSecretTypes: string[]
   hasSecrets: boolean
+  categoryFilter: string  // 'all', 'technical', 'personal'
   onSourceChange: (s: string) => void
   onTypeChange: (t: string) => void
   onSecretTypeToggle: (st: string) => void
   onSecretTypeClear: () => void
   onHasSecretsToggle: () => void
+  onCategoryFilterChange: (c: string) => void
 }
 
 const ACTIVE = 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5'
 const INACTIVE = 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'
+
+const PERSONAL_TYPES = ['personal_email','ssn','btc_address','eth_address','passport','name_dob']
 
 const Chip = ({ label, count, active, onClick, dotColor, className, activeStyle }: {
   label: string; count?: number; active: boolean; onClick: () => void
@@ -31,7 +35,7 @@ const Chip = ({ label, count, active, onClick, dotColor, className, activeStyle 
   </button>
 )
 
-export default function FilterChips({ sources, types, secretTypes, activeSource, activeType, activeSecretTypes, hasSecrets, onSourceChange, onTypeChange, onSecretTypeToggle, onSecretTypeClear, onHasSecretsToggle }: Props) {
+export default function FilterChips({ sources, types, secretTypes, activeSource, activeType, activeSecretTypes, hasSecrets, categoryFilter, onSourceChange, onTypeChange, onSecretTypeToggle, onSecretTypeClear, onHasSecretsToggle, onCategoryFilterChange }: Props) {
   const topTypes = useMemo(() => types.slice(0, 12), [types])
 
   return (
@@ -54,18 +58,36 @@ export default function FilterChips({ sources, types, secretTypes, activeSource,
         ))}
       </div>
 
+      <hr className="border-[#222222] my-1" />
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-[#444444] mr-1">Secrets</span>
+        <Chip label="Only" active={hasSecrets}
+          activeStyle="border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5"
+          onClick={onHasSecretsToggle} />
+        <Chip label="All types" active={activeSecretTypes.length === 0} onClick={onSecretTypeClear} />
+      </div>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-[#444444] mr-1">Category</span>
+        <Chip label="All" active={categoryFilter === 'all'} onClick={() => onCategoryFilterChange('all')} />
+        <Chip label="Technical" active={categoryFilter === 'technical'} onClick={() => onCategoryFilterChange('technical')} />
+        <Chip label="Personal" active={categoryFilter === 'personal'} onClick={() => onCategoryFilterChange('personal')} />
+      </div>
+
       {secretTypes.length > 0 && (
         <div className="flex flex-wrap gap-1.5 items-center overflow-x-auto pb-1">
-          <span className="text-xs text-[#444444] mr-1">Sensitive</span>
-          <Chip label="Secrets only" active={hasSecrets}
-            activeStyle="border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5"
-            onClick={onHasSecretsToggle} />
-          <Chip label="All types" active={activeSecretTypes.length === 0} onClick={onSecretTypeClear} />
-          {secretTypes.map(st => (
-            <Chip key={st.type} label={st.type} count={st.count}
-              active={activeSecretTypes.includes(st.type)}
-              onClick={() => onSecretTypeToggle(st.type)} />
-          ))}
+          {(() => {
+            let filtered = secretTypes
+            if (categoryFilter === 'technical') filtered = secretTypes.filter(st => !PERSONAL_TYPES.includes(st.type))
+            if (categoryFilter === 'personal') filtered = secretTypes.filter(st => PERSONAL_TYPES.includes(st.type))
+            return filtered.length > 0 ? filtered.map(st => (
+              <Chip key={st.type} label={st.type} count={st.count}
+                dotColor={PERSONAL_TYPES.includes(st.type) ? '#ffd700' : '#00e5ff'}
+                active={activeSecretTypes.includes(st.type)}
+                onClick={() => onSecretTypeToggle(st.type)} />
+            )) : <span className="text-xs text-[#555555]">No types in this category</span>
+          })()}
         </div>
       )}
     </div>

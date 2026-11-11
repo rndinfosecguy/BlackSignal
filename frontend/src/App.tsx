@@ -24,6 +24,7 @@ export default function App() {
   const [activeType, setActiveType] = useState('')
   const [activeSecretTypes, setActiveSecretTypes] = useState<string[]>([])
   const [hasSecrets, setHasSecrets] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const [detailId, setDetailId] = useState<string | null>(null)
   const [currentTab, setCurrentTab] = useState('dashboard')
   const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
@@ -108,6 +109,21 @@ export default function App() {
     .filter(st => st.count > 0)
     .sort((a: any, b: any) => b.count - a.count)[0]
   const totalDetections = secretTypes.reduce((sum: number, st: any) => sum + (st.count || 0), 0)
+  const personalTypes = ['personal_email','ssn','btc_address','eth_address','passport','name_dob']
+  const personalSecretCount = secretTypes
+    .filter((st: any) => personalTypes.includes(st.type))
+    .reduce((sum: number, st: any) => sum + (st.count || 0), 0)
+  const technicalSecretCount = secretTypes
+    .filter((st: any) => !personalTypes.includes(st.type))
+    .reduce((sum: number, st: any) => sum + (st.count || 0), 0)
+  const personalSecretTypes = secretTypes.filter((st: any) => personalTypes.includes(st.type))
+  const technicalSecretTypes = secretTypes.filter((st: any) => !personalTypes.includes(st.type))
+  const topTechnicalType = technicalSecretTypes
+    .filter(st => st.count > 0)
+    .sort((a: any, b: any) => b.count - a.count)[0]
+  const topPersonalType = personalSecretTypes
+    .filter(st => st.count > 0)
+    .sort((a: any, b: any) => b.count - a.count)[0]
 
   return (
     <div className="min-h-screen bg-[#0d0d0d]">
@@ -181,11 +197,13 @@ export default function App() {
                 activeType={activeType}
                 activeSecretTypes={activeSecretTypes}
                 hasSecrets={hasSecrets}
+                categoryFilter={categoryFilter}
                 onSourceChange={handleSourceChange}
                 onTypeChange={handleTypeChange}
                 onSecretTypeToggle={handleSecretTypeToggle}
                 onSecretTypeClear={handleSecretTypeClear}
                 onHasSecretsToggle={handleHasSecretsToggle}
+                onCategoryFilterChange={setCategoryFilter}
               />
             </div>
 
@@ -209,29 +227,33 @@ export default function App() {
 
           {currentTab === 'dashboard' && stats && (
             <div className="space-y-5">
-              <div className="grid grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
                 <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 text-center">
-                  <div className="text-xs text-[#888888] mb-2">Individual detections</div>
-                  <div className="text-3xl font-semibold text-[#ff004d]">{totalDetections.toLocaleString()}</div>
+                  <div className="text-xs text-[#888888] mb-2">Total findings</div>
+                  <div className="text-2xl font-semibold text-[#ff004d]">{totalDetections.toLocaleString()}</div>
                   <div className="text-[11px] text-[#555555] mt-1">
-                    in {stats.with_secrets.toLocaleString()} pastes
-                    {stats.with_secrets > 0 ? `(avg ${(totalDetections / stats.with_secrets).toFixed(1)} per paste)` : ''}
-                  </div>
-                </div>
-                <div className="bg-[#131313] border border-[#222222] rounded-lg p-5">
-                  <div className="text-xs text-[#888888] mb-2">Most common secret</div>
-                  <div className="text-sm font-semibold text-[#ffd700] mt-1">{topSecretType?.type || '—'}</div>
-                  <div className="text-[11px] text-[#555555] mt-1">
-                    {topSecretType ? topSecretType.count.toLocaleString() + ' occurrences' : 'No secrets detected'}
+                    in {stats.with_secrets.toLocaleString()} affected pastes
                   </div>
                 </div>
                 <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 text-center">
-                  <div className="text-xs text-[#888888] mb-2">Password density</div>
-                  <div className="text-3xl font-semibold text-[#ff004d]">
-                    {stats.with_secrets > 0 ? Math.round(stats.with_passwords / stats.with_secrets * 100) : 0}%
-                  </div>
+                  <div className="text-xs text-[#888888] mb-2">Technical</div>
+                  <div className="text-2xl font-semibold text-[#00e5ff]">{technicalSecretCount.toLocaleString()}</div>
                   <div className="text-[11px] text-[#555555] mt-1">
-                    of pastes with secrets have email:password combos
+                    {topTechnicalType?.type || '—'}: {topTechnicalType?.count.toLocaleString() || '0'}
+                  </div>
+                </div>
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 text-center">
+                  <div className="text-xs text-[#888888] mb-2">Personal</div>
+                  <div className="text-2xl font-semibold text-[#ffd700]">{personalSecretCount.toLocaleString()}</div>
+                  <div className="text-[11px] text-[#555555] mt-1">
+                    {topPersonalType?.type || '—'}: {topPersonalType?.count.toLocaleString() || '0'}
+                  </div>
+                </div>
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 text-center">
+                  <div className="text-xs text-[#888888] mb-2">Detection types</div>
+                  <div className="text-2xl font-semibold text-[#555555]">{secretTypes.filter((st: any) => st.count > 0).length.toLocaleString()}</div>
+                  <div className="text-[11px] text-[#555555] mt-1">
+                    active pattern categories
                   </div>
                 </div>
               </div>
@@ -272,24 +294,47 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
-                <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Detected Secret Types</div>
-                {(() => {
-                  const withCounts = secretTypes.filter(st => st.count > 0)
-                  return withCounts.length > 0 ? withCounts.slice(0, 15).map(st => {
-                    const pct = totalDetections > 0 ? st.count / totalDetections * 100 : 0
-                    return (
-                      <div key={st.type} className="flex items-center gap-2 mb-1.5">
-                        <span style={{ backgroundColor: sourceColor(st.type) }} className="w-2 h-2 rounded-full shrink-0" />
-                        <span className="text-xs text-[#777777]">{st.type}</span>
-                        <div className="flex-1 h-1.5 rounded-full bg-[#222222] overflow-hidden">
-                          <div className="h-full bg-[#ff004d] rounded-full" style={{ width: `${pct}%`, maxWidth: '100%' }} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
+                  <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Technical Detections</div>
+                  {(() => {
+                    const withCounts = technicalSecretTypes.filter((st: any) => st.count > 0)
+                    const td = withCounts.reduce((s: number, st: any) => s + (st.count || 0), 0)
+                    return withCounts.length > 0 ? withCounts.slice(0, 15).map((st: any) => {
+                      const pct = td > 0 ? st.count / td * 100 : 0
+                      return (
+                        <div key={st.type} className="flex items-center gap-2 mb-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#00e5ff]" />
+                          <span className="text-xs text-[#777777]">{st.type}</span>
+                          <div className="flex-1 h-1.5 rounded-full bg-[#222222] overflow-hidden">
+                            <div className="h-full bg-[#00e5ff] rounded-full" style={{ width: `${pct}%`, maxWidth: '100%' }} />
+                          </div>
+                          <span className="text-xs text-[#555555]">{st.count.toLocaleString()}</span>
                         </div>
-                        <span className="text-xs text-[#555555]">{st.count.toLocaleString()}</span>
-                      </div>
-                    )
-                  }) : <div className="text-xs text-[#555555]">No secrets detected yet</div>
-                })()}
+                      )
+                    }) : <div className="text-xs text-[#555555]">No technical detections</div>
+                  })()}
+                </div>
+                <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
+                  <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Personal Detections</div>
+                  {(() => {
+                    const withCounts = personalSecretTypes.filter((st: any) => st.count > 0)
+                    const pd = withCounts.reduce((s: number, st: any) => s + (st.count || 0), 0)
+                    return withCounts.length > 0 ? withCounts.slice(0, 15).map((st: any) => {
+                      const pct = pd > 0 ? st.count / pd * 100 : 0
+                      return (
+                        <div key={st.type} className="flex items-center gap-2 mb-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#ffd700]" />
+                          <span className="text-xs text-[#777777]">{st.type}</span>
+                          <div className="flex-1 h-1.5 rounded-full bg-[#222222] overflow-hidden">
+                            <div className="h-full bg-[#ffd700] rounded-full" style={{ width: `${pct}%`, maxWidth: '100%' }} />
+                          </div>
+                          <span className="text-xs text-[#555555]">{st.count.toLocaleString()}</span>
+                        </div>
+                      )
+                    }) : <div className="text-xs text-[#555555]">No personal data detected</div>
+                  })()}
+                </div>
               </div>
             </div>
           )}

@@ -102,6 +102,40 @@ _KNOWN_TEST_CARDS = frozenset({
     '4012888888881881', '4222222222222', '5555555555554444',
 })
 
+# ── Personal data patterns ────────────────────────────────────────────────────
+
+# Standalone email (not in email:password format)
+PERSONAL_EMAIL_RE = re.compile(
+    r'[\w.+-]{2,}@[\w-]{3,}\.[a-z]{2,}',
+    re.IGNORECASE
+)
+
+# Social Security Number: xxx-xx-xxxx
+SSN_RE = re.compile(r'\b\d{3}-\d{2}-\d{4}\b')
+
+# Bitcoin address (legacy 1... or SegWit 3...)
+BTC_ADDR_RE = re.compile(r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,40}\b')
+
+# Ethereum address: 0x + 40 hex
+ETH_ADDR_RE = re.compile(r'\b0x[a-fA-F0-9]{40}\b')
+
+# Passport number: letter(s) + 6-9 digits, word-bounded
+PASSPORT_RE = re.compile(r'\b[A-Z]{1,2}\d{6,9}\b')
+
+# Name + DOB on same line: "First Last" near a date
+NAME_DOB_RE = re.compile(
+    r'[A-Z][a-z]+ [A-Z][a-z]+.{0,40}?\d{1,2}[/-]\d{1,2}[/-]\d{2,4}',
+)
+
+PATTERN_CATEGORIES = {
+    "personal_email": "personal",
+    "ssn": "personal",
+    "btc_address": "personal",
+    "eth_address": "personal",
+    "passport": "personal",
+    "name_dob": "personal",
+}
+
 SEARCH_TERM_PATTERNS = []
 
 
@@ -152,7 +186,9 @@ _HAS_TRIGGER = re.compile(
     r'|\b\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d'
     r'[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*\d[- ]*'
     r'|github_pat_|mysqli_connect|client_secret'
-    r'|define\s*\(|table_prefix',
+    r'|define\s*\(|table_prefix'
+    r'|\d{3}-\d{2}-\d{4}|[13][a-km-zA-HJ-NP-Z]|0x[a-fA-F0-9]{20,}'
+    r'|[A-Z]{1,2}\d{6,9}|\d{1,2}/\d{1,2}/\d{2,4}',
     re.IGNORECASE
 )
 
@@ -176,6 +212,12 @@ SCAN_PATTERNS = [
     ("mysql_connect", MYSQLI_CONNECT_RE),
     ("wp_config", WPCONFIG_RE),
     ("client_secret", CLIENT_SECRET_RE),
+    ("personal_email", PERSONAL_EMAIL_RE),
+    ("ssn", SSN_RE),
+    ("btc_address", BTC_ADDR_RE),
+    ("eth_address", ETH_ADDR_RE),
+    ("passport", PASSPORT_RE),
+    ("name_dob", NAME_DOB_RE),
 ]
 
 
@@ -304,6 +346,51 @@ def scan_content(content, scan_limit=None):
                     if not value or len(value) < 4:
                         continue
                     if '(' in value or '.' in value or '$' in value:
+                        continue
+
+                # ── Personal email: skip if already caught by email:password ─
+                elif name == "personal_email":
+                    # Skip if line also contains email:password pattern (already caught)
+                    if ':' in group.split('@')[0]:
+                        continue
+                    parts = group.split('@')
+                    if len(parts) == 2:
+                        domain = parts[1].split('.')[0]
+                        # Skip if domain starts with a digit (random encoded text)
+                        if domain and domain[0].isdigit():
+                            continue
+                        # Skip if domain has mixed case with uppercase not at start (random text)
+                        if domain and any(c.isupper() for c in domain[1:]):
+                            continue
+
+                # ── SSN: reject test/placeholder numbers ───────────────────
+                elif name == "ssn":
+                    digits = group.replace('-', '')
+                    if digits in ('000000000', '123456789', '111111111'):
+                        continue
+
+                # ── Passport: skip if too short or looks like a code ───────
+                elif name == "passport":
+                    if len(group) < 7:
+                        continue
+                    # Skip if preceded by a word character (likely part of code)
+                    if match.start() > 0 and line[match.start() - 1].isalnum():
+                        continue
+                    # Skip if preceded by @ or | (tag/identifier, not passport)
+                    if match.start() > 0 and line[match.start() - 1] in '@|':
+                        continue
+                    # Skip if the digit portion starts with a leading zero (ID number, not passport)
+                    digits = re.sub(r'[^0-9]', '', group)
+                    if digits and digits[0] == '0':
+                        continue
+
+                # ── BTC / ETH: skip if part of a file path ────────────────
+                elif name in ("btc_address", "eth_address"):
+                    # Skip if preceded by / or \ (path segment, not wallet address)
+                    if match.start() > 0 and line[match.start() - 1] in '/\\':
+                        continue
+                    # Skip if followed by / or . (path continuation or file extension)
+                    if match.end() < len(line) and line[match.end()] in '/.':
                         continue
 
                 findings.append({

@@ -11,19 +11,19 @@ export default function StatsDashboard({ stats }: Props) {
 
   const cards = [
     {
-      label: 'Pastes',
+      label: 'Total pastes',
       value: fmt(stats.total),
       total: stats.total_all !== undefined ? fmt(stats.total_all) : null,
       accent: 'text-[#00ff41]',
     },
     {
-      label: 'Secrets',
+      label: 'Affected',
       value: fmt(stats.with_secrets),
       total: stats.with_secrets_all !== undefined ? fmt(stats.with_secrets_all) : null,
       accent: 'text-[#ff004d]',
     },
     {
-      label: 'Passwords',
+      label: 'Email:pw',
       value: fmt(stats.with_passwords),
       total: stats.with_passwords_all !== undefined ? fmt(stats.with_passwords_all) : null,
       accent: 'text-[#ff004d]',
