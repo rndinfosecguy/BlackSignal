@@ -93,6 +93,44 @@ def clear_cache():
         fn.cache_clear()
 
 
+def _warm_cache():
+    """Wait for the initial index to finish, then run common SELECT queries
+    to pull database pages into the OS filesystem cache.
+    Runs in a background daemon thread — the user never sees it."""
+    import time
+    from database import get_conn
+
+    # Wait for the first index to complete
+    while True:
+        status = get_index_progress()
+        if not status["running"] and status["phase"] == "":
+            break
+        time.sleep(2)
+
+    logger.info("Warming OS cache with common queries…")
+    conn = get_conn()
+
+    # Stats queries (touch multiple indexes + tables)
+    conn.execute("SELECT COUNT(*) FROM pastes").fetchone()
+    conn.execute("SELECT COUNT(*) FROM pastes WHERE has_secrets = 1").fetchone()
+    conn.execute("SELECT COUNT(*) FROM pastes WHERE has_passwords = 1").fetchone()
+
+    # Source / type / secret-type distributions
+    conn.execute("SELECT source, COUNT(*) AS cnt FROM pastes GROUP BY source ORDER BY cnt DESC").fetchall()
+    conn.execute("SELECT content_type, COUNT(*) AS cnt FROM pastes GROUP BY content_type ORDER BY cnt DESC").fetchall()
+    conn.execute("SELECT secret_types, COUNT(*) AS cnt FROM pastes WHERE secret_types != '' GROUP BY secret_types ORDER BY cnt DESC").fetchall()
+
+    # One source-filter query per source (most common user action)
+    sources = conn.execute("SELECT DISTINCT source FROM pastes").fetchall()
+    for row in sources:
+        conn.execute("SELECT COUNT(*) FROM pastes WHERE source = ?", (row["source"],)).fetchone()
+
+    # Touch FTS5 index data
+    conn.execute("SELECT rowid FROM pastes_fts WHERE pastes_fts MATCH '\"\"' LIMIT 1").fetchall()
+
+    logger.info("Cache warm-up complete")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -101,6 +139,7 @@ async def lifespan(app: FastAPI):
     _get_stats_cached(None, None, None, None, ())
 
     threading.Thread(target=index_all_pastes, daemon=True).start()
+    threading.Thread(target=_warm_cache, daemon=True).start()
     start_scheduler(REINDEX_INTERVAL)
     yield
 
