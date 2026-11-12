@@ -23,7 +23,7 @@ export default function StatsDashboard({ stats }: Props) {
       accent: 'text-[#ff004d]',
     },
     {
-      label: 'Email:pw',
+      label: 'Email:password',
       value: fmt(stats.with_passwords),
       total: stats.with_passwords_all !== undefined ? fmt(stats.with_passwords_all) : null,
       accent: 'text-[#ff004d]',

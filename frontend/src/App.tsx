@@ -253,7 +253,7 @@ export default function App() {
                   <div className="text-xs text-[#888888] mb-2">Detection types</div>
                   <div className="text-2xl font-semibold text-[#555555]">{secretTypes.filter((st: any) => st.count > 0).length.toLocaleString()}</div>
                   <div className="text-[11px] text-[#555555] mt-1">
-                    active pattern categories
+                    different categories
                   </div>
                 </div>
               </div>

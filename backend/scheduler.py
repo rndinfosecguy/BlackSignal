@@ -42,6 +42,29 @@ def set_index_running(running: bool, phase: str = ""):
     _index_progress.update(running=running, current=0, total=0, phase=phase)
 
 
+def _warm_os_cache():
+    """Run common SELECT queries to pull database pages into the OS filesystem cache.
+    Called at the end of every index run so that first-user interactions
+    (source filter, stats, type distribution) serve instantly."""
+    import time
+    try:
+        conn = get_conn()
+        logger.info("Warming OS cache with common queries…")
+        conn.execute("SELECT COUNT(*) FROM pastes").fetchone()
+        conn.execute("SELECT COUNT(*) FROM pastes WHERE has_secrets = 1").fetchone()
+        conn.execute("SELECT COUNT(*) FROM pastes WHERE has_passwords = 1").fetchone()
+        conn.execute("SELECT source, COUNT(*) AS cnt FROM pastes GROUP BY source ORDER BY cnt DESC").fetchall()
+        conn.execute("SELECT content_type, COUNT(*) AS cnt FROM pastes GROUP BY content_type ORDER BY cnt DESC").fetchall()
+        conn.execute("SELECT secret_types, COUNT(*) AS cnt FROM pastes WHERE secret_types != '' GROUP BY secret_types ORDER BY cnt DESC").fetchall()
+        sources = conn.execute("SELECT DISTINCT source FROM pastes").fetchall()
+        for row in sources:
+            conn.execute("SELECT COUNT(*) FROM pastes WHERE source = ?", (row["source"],)).fetchone()
+        conn.execute("SELECT rowid FROM pastes_fts WHERE pastes_fts MATCH '\"\"' LIMIT 1").fetchall()
+        logger.info("Cache warm-up complete")
+    except Exception:
+        logger.exception("Cache warm-up failed (non-fatal)")
+
+
 def _process_single(f, scan_limit=None):
     """Read, detect and scan a single file — runs in a worker thread.
     scan_limit — max chars to scan (None = default 200K, 0 = unlimited)."""
@@ -246,6 +269,9 @@ def index_all_pastes(scan_limit=None):
         result = {"indexed": indexed_count, "deleted": deleted_count, "total": len(current_ids)}
         _last_reindex_result.update(result)
         _last_reindex_result["skipped"] = skipped_count
+
+        _warm_os_cache()
+
         return result
     except Exception:
         logger.exception("Indexing failed")
