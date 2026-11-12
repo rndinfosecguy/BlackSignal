@@ -13,6 +13,7 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 ## Features
 
 ![image](assets/example.jpg)
+![image](assets/example2.jpg)
 
 - **Search & browse** — full-text search (SQLite FTS5) 
 - **Filtering** — by source site, detected content type, sensitive-data categories and technical/personal classification
