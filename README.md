@@ -12,7 +12,10 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 
 ## Features
 
+### Dashboard
 ![image](assets/example.jpg)
+
+### Analyze Pastes
 ![image](assets/example2.jpg)
 
 - **Search & browse** — full-text search (SQLite FTS5) 
