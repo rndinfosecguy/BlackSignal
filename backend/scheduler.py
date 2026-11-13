@@ -49,7 +49,7 @@ def _warm_os_cache():
     import time
     try:
         conn = get_conn()
-        logger.info("Warming OS cache with common queries…")
+        logger.info("Warming OS cache with common queries\u2026")
         conn.execute("SELECT COUNT(*) FROM pastes").fetchone()
         conn.execute("SELECT COUNT(*) FROM pastes WHERE has_secrets = 1").fetchone()
         conn.execute("SELECT COUNT(*) FROM pastes WHERE has_passwords = 1").fetchone()
@@ -59,7 +59,11 @@ def _warm_os_cache():
         sources = conn.execute("SELECT DISTINCT source FROM pastes").fetchall()
         for row in sources:
             conn.execute("SELECT COUNT(*) FROM pastes WHERE source = ?", (row["source"],)).fetchone()
-        conn.execute("SELECT rowid FROM pastes_fts WHERE pastes_fts MATCH '\"\"' LIMIT 1").fetchall()
+        conn.execute("SELECT count(*) FROM pastes_fts").fetchone()
+        # Warm the first_seen DESC index + recent rows (main pastes list query)
+        conn.execute("SELECT first_seen FROM pastes ORDER BY first_seen DESC LIMIT 50").fetchall()
+        # Warm COUNT(DISTINCT source) — used by get_stats()
+        conn.execute("SELECT COUNT(DISTINCT source) FROM pastes").fetchone()
         logger.info("Cache warm-up complete")
     except Exception:
         logger.exception("Cache warm-up failed (non-fatal)")
