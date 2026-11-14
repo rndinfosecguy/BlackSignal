@@ -183,7 +183,7 @@ def api_version():
 
 
 @app.get("/api/index-status")
-def api_index_status():
+async def api_index_status():
     return get_index_progress()
 
 

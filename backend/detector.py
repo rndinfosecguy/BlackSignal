@@ -102,6 +102,16 @@ _KNOWN_TEST_CARDS = frozenset({
     '4012888888881881', '4222222222222', '5555555555554444',
 })
 
+# Local parts that are almost certainly technical/system users, not personal emails.
+_TECHNICAL_LOCAL_PARTS = frozenset({
+    'git', 'root', 'admin', 'nobody', 'www', 'webmaster',
+    'postmaster', 'hostmaster', 'abuse', 'noreply', 'no-reply',
+    'daemon', 'support',
+})
+
+# Characters valid in base64 encoding — used to detect base64 blob embeddings.
+_BASE64_CHARS = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+
 # ── Personal data patterns ────────────────────────────────────────────────────
 
 # Standalone email (not in email:password format)
@@ -314,7 +324,8 @@ def scan_content(content, scan_limit=None):
                         continue
                     if value.lower() in ('null', 'none', 'undefined', 'your-password',
                                          'password', 'changeme', 'xxxx', '****',
-                                         'your-password-here'):
+                                         'your-password-here', 'true', 'false',
+                                         'enabled', 'disabled'):
                         continue
                     # Skip function calls (foo()) and property/method chains (foo.bar)
                     if '(' in value or '.' in value:
@@ -362,6 +373,9 @@ def scan_content(content, scan_limit=None):
                         # Skip if domain has mixed case with uppercase not at start (random text)
                         if domain and any(c.isupper() for c in domain[1:]):
                             continue
+                    # Skip if local part is a known technical/system user
+                    if parts[0].lower() in _TECHNICAL_LOCAL_PARTS:
+                        continue
 
                 # ── SSN: reject test/placeholder numbers ───────────────────
                 elif name == "ssn":
@@ -391,6 +405,11 @@ def scan_content(content, scan_limit=None):
                         continue
                     # Skip if followed by / or . (path continuation or file extension)
                     if match.end() < len(line) and line[match.end()] in '/.':
+                        continue
+                    # Skip if embedded in a base64 blob (base64 char both before and after)
+                    if (match.start() > 0 and match.end() < len(line) and
+                        line[match.start() - 1] in _BASE64_CHARS and
+                        line[match.end()] in _BASE64_CHARS):
                         continue
 
                 findings.append({
