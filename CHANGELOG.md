@@ -6,6 +6,26 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.3.3] — 2026-11-14
+
+### Fixed
+- Credential assignment false positives: skip boolean (`true`/`false`) and config-state
+  (`enabled`/`disabled`) values — these are not real credentials
+
+---
+
+## [1.3.2] — 2026-11-13
+
+### Fixed
+- FTS5 warm-up query — replaced `MATCH '""'` (syntax error on empty DB) with
+  `count(*)` which safely walks the FTS segment tree without erroring
+- `/api/index-status` endpoint changed from sync to async — avoids GIL contention with
+  indexer worker threads, preventing request delays during big-file processing
+- Cache warm-up now also touches the `first_seen DESC` index (main pastes list query)
+  and `COUNT(DISTINCT source)` (used by stats)
+
+---
+
 ## [1.3.1] — 2026-11-12
 
 ### Added
