@@ -79,7 +79,7 @@ def walk_pastes():
             for entry in os.scandir(source_path):
                 if entry.is_file(follow_symlinks=False):
                     files.append({
-                        "id": entry.name,
+                        "id": f"{source_dir}:{entry.name}",
                         "filename": entry.name,
                         "source": source_dir,
                         "path": entry.path,
