@@ -2,6 +2,12 @@
 
 ![image](assets/bs_logo.png)
 
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Python](https://img.shields.io/badge/Python-3.12-blueviolet)
+![Docker](https://img.shields.io/badge/Docker-ready-0db7ed)
+![Version](https://img.shields.io/badge/version-1.3.3-brightgreen)
+![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
+
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
 
 Best used in combination with my paste scraper project [rndinfosecguy/Scavenger](https://github.com/rndinfosecguy/Scavenger).
