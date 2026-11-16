@@ -6,6 +6,16 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.3.4] — 2026-11-16
+
+### Fixed
+- Paste ID collision across sources — `walk_pastes()` now uses `source:filename` as the
+  paste ID instead of the bare filename, preventing data loss when different paste sites
+  share the same file naming convention (e.g. both `pastebin/abc123` and `github/abc123`
+  now get unique IDs `pastebin:abc123` and `github:abc123`)
+
+---
+
 ## [1.3.3] — 2026-11-14
 
 ### Fixed
