@@ -105,7 +105,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="BlackSignal", lifespan=lifespan)
+app = FastAPI(
+    title="BlackSignal",
+    description="Self-hosted paste intelligence: browse, search, and analyze paste data with automatic sensitive-info detection.",
+    version=APP_VERSION,
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,

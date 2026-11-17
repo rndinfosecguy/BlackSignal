@@ -6,6 +6,15 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.4.0] — 2026-11-17
+
+### Added
+- **Interactive API docs** — Swagger UI at `/api/docs` and ReDoc at `/api/redoc`,
+  auto-generated from FastAPI's OpenAPI schema. Lists every endpoint, parameter,
+  and response format with live try-it-out functionality.
+
+---
+
 ## [1.3.4] — 2026-11-16
 
 ### Fixed
