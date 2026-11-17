@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import uvicorn
 
-from database import init_db, build_filter_conditions, search_pastes, get_paste_by_id, get_sources, \
+from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, get_paste_by_id, get_sources, \
     get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running
 
@@ -165,7 +165,17 @@ def api_search(
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
+    group_by: str = Query(None, description="Group results by column (source, content_type)"),
 ):
+    if group_by:
+        return search_pastes_grouped(
+            group_by=group_by,
+            query=normalize_fts_query(q),
+            source=source,
+            content_type=content_type,
+            has_secrets=_parse_bool(has_secrets),
+            secret_types=secret_type if secret_type else None,
+        )
     return search_pastes(
         query=normalize_fts_query(q),
         source=source,

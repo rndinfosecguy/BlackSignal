@@ -15,7 +15,7 @@ export default function App() {
   const {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
-    lastReindexResult,
+    lastReindexResult, groupedData,
     applyFilters, fetchStats, triggerReindex,
   } = usePastes()
 
@@ -25,6 +25,7 @@ export default function App() {
   const [activeSecretTypes, setActiveSecretTypes] = useState<string[]>([])
   const [hasSecrets, setHasSecrets] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState('all')
+  const [groupBy, setGroupBy] = useState('')
   const [detailId, setDetailId] = useState<string | null>(null)
   const [currentTab, setCurrentTab] = useState('dashboard')
   const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
@@ -47,7 +48,8 @@ export default function App() {
       overrides.source !== undefined ||
       overrides.type !== undefined ||
       overrides.secretTypes !== undefined ||
-      overrides.hasSecrets !== undefined
+      overrides.hasSecrets !== undefined ||
+      overrides.groupBy !== undefined
 
     applyFilters({
       q: overrides.q !== undefined ? overrides.q : query,
@@ -55,9 +57,10 @@ export default function App() {
       type: overrides.type !== undefined ? overrides.type : activeType,
       secretTypes: overrides.secretTypes !== undefined ? overrides.secretTypes : activeSecretTypes,
       hasSecrets: overrides.hasSecrets !== undefined ? overrides.hasSecrets : hasSecrets,
+      groupBy: overrides.groupBy !== undefined ? overrides.groupBy : groupBy,
       page: filterChanged ? 1 : (overrides.page ?? page),
     })
-  }, [applyFilters, query, activeSource, activeType, activeSecretTypes, hasSecrets, page])
+  }, [applyFilters, query, activeSource, activeType, activeSecretTypes, hasSecrets, groupBy, page])
 
   const handleSearch = useCallback((q: string) => {
     setQuery(q)
@@ -208,10 +211,51 @@ export default function App() {
             </div>
 
             <div className="space-y-3">
-              {loading && pastes.length === 0 ? (
+              {/* Group toggle */}
+              <div className="flex flex-wrap gap-2 items-center mb-2">
+                <span className="text-xs text-[#444444] mr-1">Group</span>
+                <button onClick={() => { setGroupBy(''); applyAll({ groupBy: '' }) }}
+                  className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${!groupBy ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                  None
+                </button>
+                <button onClick={() => { setGroupBy('source'); applyAll({ groupBy: 'source' }) }}
+                  className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                  Source
+                </button>
+                <button onClick={() => { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) }}
+                  className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                  Type
+                </button>
+              </div>
+
+              {loading && pastes.length === 0 && groupedData === null ? (
                 <div className="flex items-center justify-center h-32 text-[#555555]">Loading pastes...</div>
               ) : error ? (
                 <div className="flex items-center justify-center h-32"><span className="text-[#ff004d]">Error: {error}</span></div>
+              ) : groupedData ? (
+                <div className="space-y-4">
+                  {groupedData.groups.map(g => (
+                    <details key={g.key} className="bg-[#131313] border border-[#222222] rounded-lg p-3">
+                      <summary className="text-xs font-medium cursor-pointer flex items-center gap-2"
+                        style={{ color: groupBy === 'source' ? sourceColor(g.key) : '#00e5ff' }}>
+                        <span>{g.key}</span>
+                        <span className="text-[#555555]">({g.total.toLocaleString()})</span>
+                      </summary>
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {g.results.map(p => <PasteCard key={`${p.source}:${p.id}`} {...p} onClick={setDetailId} />)}
+                      </div>
+                      {g.total > g.results.length && (
+                        <button onClick={() => {
+                          if (groupBy === 'source') { setActiveSource(g.key); applyAll({ source: g.key }) }
+                          else { setActiveType(g.key); applyAll({ type: g.key }) }
+                        }}
+                          className="w-full mt-2 text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#777777] hover:border-[#444444] transition-all cursor-pointer">
+                          View all {g.total.toLocaleString()} results
+                        </button>
+                      )}
+                    </details>
+                  ))}
+                </div>
               ) : pastes.length === 0 ? (
                 <div className="flex items-center justify-center h-32 text-[#555555]">No results found</div>
               ) : (
@@ -221,7 +265,7 @@ export default function App() {
               )}
             </div>
 
-            <Pagination page={page} totalPages={totalPages} total={total} onChange={handlePageChange} />
+            {!groupedData && <Pagination page={page} totalPages={totalPages} total={total} onChange={handlePageChange} />}
             </>
           )}
 

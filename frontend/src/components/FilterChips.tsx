@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { sourceColor } from '../lib/utils'
 
 interface SourceCount { source: string; count: number }
@@ -37,26 +37,40 @@ const Chip = ({ label, count, active, onClick, dotColor, className, activeStyle 
 
 export default function FilterChips({ sources, types, secretTypes, activeSource, activeType, activeSecretTypes, hasSecrets, categoryFilter, onSourceChange, onTypeChange, onSecretTypeToggle, onSecretTypeClear, onHasSecretsToggle, onCategoryFilterChange }: Props) {
   const topTypes = useMemo(() => types.slice(0, 12), [types])
+  const [showSource, setShowSource] = useState(false)
+  const [showType, setShowType] = useState(false)
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap gap-2 items-center">
-        <span className="text-xs text-[#444444] mr-1">Source</span>
-        <Chip label="All" active={!activeSource} onClick={() => onSourceChange('')} />
-        {sources.filter(s => s.count > 0).map(s => (
-          <Chip key={s.source} label={s.source} count={s.count} active={activeSource === s.source}
-            dotColor={sourceColor(s.source)} onClick={() => onSourceChange(activeSource === s.source ? '' : s.source)} />
-        ))}
+      <div className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-[#444444] mr-1" onClick={() => setShowSource(!showSource)}>
+        <span className="text-[10px] text-[#555555]">{showSource ? '▼' : '▶'}</span>
+        <span>Source:</span>
+        <span className={`${activeSource ? 'text-[#00e5ff]' : 'text-[#666666]'}`}>{activeSource || 'All'}</span>
       </div>
+      {showSource && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <Chip label="All" active={!activeSource} onClick={() => onSourceChange('')} />
+          {sources.filter(s => s.count > 0).map(s => (
+            <Chip key={s.source} label={s.source} count={s.count} active={activeSource === s.source}
+              dotColor={sourceColor(s.source)} onClick={() => onSourceChange(activeSource === s.source ? '' : s.source)} />
+          ))}
+        </div>
+      )}
 
-      <div className="flex flex-wrap gap-2 items-center">
-        <span className="text-xs text-[#444444] mr-1">Type</span>
-        <Chip label="All" active={!activeType} onClick={() => onTypeChange('')} />
-        {topTypes.filter(t => t.count > 0).map(t => (
-          <Chip key={t.content_type} label={t.content_type} count={t.count}
-            active={activeType === t.content_type} onClick={() => onTypeChange(activeType === t.content_type ? '' : t.content_type)} />
-        ))}
+      <div className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-[#444444] mr-1" onClick={() => setShowType(!showType)}>
+        <span className="text-[10px] text-[#555555]">{showType ? '▼' : '▶'}</span>
+        <span>Type:</span>
+        <span className={`${activeType ? 'text-[#00e5ff]' : 'text-[#666666]'}`}>{activeType || 'All'}</span>
       </div>
+      {showType && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <Chip label="All" active={!activeType} onClick={() => onTypeChange('')} />
+          {topTypes.filter(t => t.count > 0).map(t => (
+            <Chip key={t.content_type} label={t.content_type} count={t.count}
+              active={activeType === t.content_type} onClick={() => onTypeChange(activeType === t.content_type ? '' : t.content_type)} />
+          ))}
+        </div>
+      )}
 
       <hr className="border-[#222222] my-1" />
 

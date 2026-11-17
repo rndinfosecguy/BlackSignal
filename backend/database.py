@@ -160,6 +160,60 @@ def delete_paste(paste_id, commit=True):
         conn.commit()
 
 
+def search_pastes_grouped(group_by, query=None, source=None, content_type=None,
+                          has_secrets=None, secret_types=None, per_group=5):
+    """Search pastes grouped by a column (source or content_type).
+    Returns top 10 groups, each with up to `per_group` results."""
+    conn = get_conn()
+    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types)
+    where = " AND ".join(conditions) if conditions else "1=1"
+
+    # Validate group_by column
+    valid_columns = {"source": "p.source", "content_type": "p.content_type"}
+    col_expr = valid_columns.get(group_by)
+    if not col_expr:
+        return None  # fallback to flat search
+
+    # Get top 10 groups by count
+    group_sql = f"SELECT {col_expr} AS key, COUNT(*) AS cnt FROM pastes p WHERE {where} GROUP BY key ORDER BY cnt DESC LIMIT 10"
+    groups = conn.execute(group_sql, params).fetchall()
+
+    total = sum(g["cnt"] for g in groups)
+    result_groups = []
+
+    data_sql = f"""
+        SELECT p.id, p.filename, p.source, p.content_type, p.size,
+               p.has_passwords, p.has_secrets, p.secret_types,
+               p.first_seen, p.modified_at,
+               CASE WHEN p.snippet = '' THEN substr(p.content, 1, 200) ELSE p.snippet END as snippet
+        FROM pastes p
+        WHERE {where} AND {col_expr} = ?
+        ORDER BY p.first_seen DESC
+        LIMIT ?
+    """
+
+    for g in groups:
+        key = g["key"]
+        rows = conn.execute(data_sql, params + [key, per_group]).fetchall()
+        items = []
+        for row in rows:
+            d = dict(row)
+            st = d.get("secret_types") or ""
+            d["secret_types"] = [x for x in st.split(",") if x] if st else []
+            items.append(d)
+        result_groups.append({
+            "key": key,
+            "total": g["cnt"],
+            "results": items,
+        })
+
+    return {
+        "total": total,
+        "group_by": group_by,
+        "groups": result_groups,
+    }
+
+
 def search_pastes(query=None, source=None, content_type=None,
                   has_secrets=None, secret_types=None,
                   page=1, per_page=50):

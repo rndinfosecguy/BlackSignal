@@ -9,6 +9,7 @@ export interface FilterState {
   secretTypes?: string[]
   hasSecrets?: boolean
   page?: number
+  groupBy?: string
 }
 
 interface SecretTypeCount { type: string; count: number }
@@ -23,6 +24,11 @@ interface PasteResult {
   first_seen: string; snippet: string
 }
 interface SearchResult { total: number; page: number; per_page: number; total_pages: number; results: PasteResult[] }
+interface GroupedResult {
+  total: number
+  group_by: string
+  groups: { key: string; total: number; results: PasteResult[] }[]
+}
 
 interface IndexStatus {
   running: boolean
@@ -40,6 +46,7 @@ function queryString(state: FilterState): string {
   if (state.type) qp.set('content_type', state.type)
   if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
   if (state.hasSecrets) qp.set('has_secrets', 'true')
+  if (state.groupBy) qp.set('group_by', state.groupBy)
   return qp.toString()
 }
 
@@ -67,6 +74,7 @@ export function usePastes() {
   const [lastReindexResult, setLastReindexResult] = useState<{indexed: number; deleted: number; total: number; skipped: number} | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [indexStatus, setIndexStatus] = useState<IndexStatus>(defaultIndexStatus)
+  const [groupedData, setGroupedData] = useState<GroupedResult | null>(null)
 
   const pastesReqId = useRef(0)
   const statsReqId = useRef(0)
@@ -77,6 +85,7 @@ export function usePastes() {
     const reqId = ++pastesReqId.current
     setLoading(true)
     setError(null)
+    setGroupedData(null)  // clear any stale grouped data
     const qs = queryString(state)
     const url = `${API_BASE}/pastes?${qs}${qs ? '&' : ''}page=${state.page || 1}&per_page=50`
     try {
@@ -103,11 +112,37 @@ export function usePastes() {
     if (data && statsReqId.current === reqId) setStats(data)
   }, [])
 
+  const fetchGroupedPastes = useCallback(async (state: FilterState) => {
+    const reqId = ++pastesReqId.current
+    setLoading(true)
+    setError(null)
+    setGroupedData(null)
+    const qs = queryString(state)
+    const url = `${API_BASE}/pastes?${qs}`
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data: GroupedResult = await res.json()
+      if (pastesReqId.current !== reqId) return
+      setGroupedData(data)
+      setTotal(data.total)
+    } catch (e: unknown) {
+      if (pastesReqId.current !== reqId) return
+      setError(e instanceof Error ? e.message : 'Failed to fetch pastes')
+    } finally {
+      if (pastesReqId.current === reqId) setLoading(false)
+    }
+  }, [])
+
   const applyFilters = useCallback((state: FilterState) => {
     if (runningRef.current) return
-    fetchPastes(state)
+    if (state.groupBy) {
+      fetchGroupedPastes(state)
+    } else {
+      fetchPastes(state)
+    }
     fetchStats(state)
-  }, [fetchPastes, fetchStats])
+  }, [fetchPastes, fetchGroupedPastes, fetchStats])
 
   // Poll index status every 60s; fetch initial data once when the indexer is idle
   useEffect(() => {
@@ -195,7 +230,7 @@ export function usePastes() {
   return {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
-    lastReindexResult,
+    lastReindexResult, groupedData,
     applyFilters, fetchStats, triggerReindex,
   }
 }

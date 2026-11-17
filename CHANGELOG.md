@@ -6,6 +6,21 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.5.0] — 2026-11-17
+
+### Added
+- **Collapsible source/type filters** — Source and Type rows can be collapsed,
+  showing only the current selection (e.g. "Source: pastebin" in cyan). Click
+  the row header to expand and change filters. Secrets and Category rows
+  remain always visible.
+- **Search result grouping** — new Group toggle (None / Source / Type) above
+  the pastes list. Results are grouped into collapsible sections by source or
+  content type, each showing up to 5 preview cards with a "View all" button.
+- **Interactive API docs** — Swagger UI at `/api/docs` and ReDoc at
+  `/api/redoc`, auto-generated from FastAPI's OpenAPI schema.
+
+---
+
 ## [1.4.0] — 2026-11-17
 
 ### Added
