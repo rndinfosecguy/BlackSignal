@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Python](https://img.shields.io/badge/Python-3.12-blueviolet)
 ![Docker](https://img.shields.io/badge/Docker-ready-0db7ed)
-![Version](https://img.shields.io/badge/version-1.5.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.6.0-brightgreen)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
@@ -150,7 +150,8 @@ Visit `http://localhost:9090`
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/pastes` | Paginated/searchable list. Params: `q`, `source`, `content_type`, `has_secrets`, `secret_type` (repeatable, OR), `page`, `per_page` |
+| GET | `/api/pastes` | Paginated/searchable list. Params: `q`, `source`, `content_type`, `has_secrets`, `secret_type` (repeatable, OR), `page`, `per_page`, `group_by` (source or content_type) |
+| GET | `/api/pastes/export` | Export search results as CSV or JSON. Params: same as `/api/pastes` (except `page`, `per_page`) + `format=csv|json` (default csv) + `include_content=true|false` (default false) |
 | GET | `/api/pastes/{id}` | Full paste content + detected secrets |
 | GET | `/api/stats` | Filter-aware counts (past/secrets/passwords/sources) |
 | GET | `/api/sources` | Source distribution |
@@ -158,7 +159,7 @@ Visit `http://localhost:9090`
 | GET | `/api/secret-types` | Detected secret categories with counts |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
-| GET | `/api/version` | App version: `{ version: "1.5.0" }` |
+| GET | `/api/version` | App version: `{ version: "1.6.0" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
 
 Example:

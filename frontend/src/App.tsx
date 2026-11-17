@@ -211,21 +211,34 @@ export default function App() {
             </div>
 
             <div className="space-y-3">
-              {/* Group toggle */}
-              <div className="flex flex-wrap gap-2 items-center mb-2">
-                <span className="text-xs text-[#444444] mr-1">Group</span>
-                <button onClick={() => { setGroupBy(''); applyAll({ groupBy: '' }) }}
-                  className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${!groupBy ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
-                  None
-                </button>
-                <button onClick={() => { setGroupBy('source'); applyAll({ groupBy: 'source' }) }}
-                  className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
-                  Source
-                </button>
-                <button onClick={() => { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) }}
-                  className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
-                  Type
-                </button>
+              {/* Group toggle + Export */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-[#444444] mr-1">Group</span>
+                  <button onClick={() => { setGroupBy(''); applyAll({ groupBy: '' }) }}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${!groupBy ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                    None
+                  </button>
+                  <button onClick={() => { setGroupBy('source'); applyAll({ groupBy: 'source' }) }}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                    Source
+                  </button>
+                  <button onClick={() => { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) }}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                    Type
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-[#444444] mr-1">Export</span>
+                  <a href={`/api/pastes/export?format=csv${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSource ? `&source=${encodeURIComponent(activeSource)}` : ''}${activeType ? `&content_type=${encodeURIComponent(activeType)}` : ''}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}`}
+                    className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888] transition-all cursor-pointer no-underline">
+                    CSV
+                  </a>
+                  <a href={`/api/pastes/export?format=json${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSource ? `&source=${encodeURIComponent(activeSource)}` : ''}${activeType ? `&content_type=${encodeURIComponent(activeType)}` : ''}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}`}
+                    className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888] transition-all cursor-pointer no-underline">
+                    JSON
+                  </a>
+                </div>
               </div>
 
               {loading && pastes.length === 0 && groupedData === null ? (

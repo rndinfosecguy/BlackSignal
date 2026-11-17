@@ -6,6 +6,20 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.6.0] — 2026-11-17
+
+### Added
+- **Export findings** — CSV and JSON export of search results at `/api/pastes/export`.
+  Respects all active filters (source, type, search query, secret types). CSV includes
+  a `secrets_detail` column with the affected line text per finding. JSON includes the
+  full structured `secrets_detail` array with `type`, `line`, `match`, and `line_text`.
+  Export buttons (CSV / JSON) sit alongside the Group toggle in the pastes tab.
+- **`line_text` in findings** — each detection now stores the full line content from
+  the paste alongside the match text. A one-time reindex populates this for historical
+  pastes.
+
+---
+
 ## [1.5.0] — 2026-11-17
 
 ### Added

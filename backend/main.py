@@ -1,4 +1,6 @@
 import os
+import csv
+import io
 import logging
 import threading
 from contextlib import asynccontextmanager
@@ -7,10 +9,10 @@ from functools import lru_cache
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 import uvicorn
 
-from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, get_paste_by_id, get_sources, \
+from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, export_pastes, get_paste_by_id, get_sources, \
     get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running
 
@@ -185,6 +187,89 @@ def api_search(
         page=page,
         per_page=per_page,
     )
+
+
+@app.get("/api/pastes/export")
+def api_pastes_export(
+    format: str = Query("csv", description="Export format: 'csv' or 'json'"),
+    q: str = Query("", description="Search query"),
+    source: str = Query(None, description="Source filter"),
+    content_type: str = Query(None, description="Content type filter"),
+    has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
+    secret_type: list[str] = Query([], description="Secret type filters (OR)"),
+    include_content: str = Query("false", description="Include full paste content ('true' or 'false')"),
+):
+    import json as jsonlib
+
+    query = normalize_fts_query(q)
+    has_sec = _parse_bool(has_secrets)
+    inc_content = _parse_bool(include_content)
+    secret_types = secret_type if secret_type else None
+
+    rows = list(export_pastes(query=query, source=source, content_type=content_type,
+                              has_secrets=has_sec, secret_types=secret_types,
+                              include_content=inc_content))
+
+    if format == "json":
+        def json_stream():
+            yield "[\n"
+            for i, row in enumerate(rows):
+                if i > 0:
+                    yield ",\n"
+                row["has_passwords"] = bool(row["has_passwords"])
+                row["has_secrets"] = bool(row["has_secrets"])
+                # Include full secrets_detail (already parsed as Python list)
+                yield jsonlib.dumps(row)
+            yield "\n]"
+
+        return StreamingResponse(
+            json_stream(),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=\"blacksignal-export.json\""},
+        )
+    else:
+        def _fmt_sd(details):
+            """Flatten secrets_detail for CSV: '[type] line L: line_text' per finding."""
+            if not details:
+                return ""
+            parts = []
+            for f in details:
+                lt = f.get("line_text", "").strip()
+                if lt:
+                    parts.append(f"[{f['type']}] {lt[:200]}")
+            return " | ".join(parts)
+
+        def csv_stream():
+            output = io.StringIO()
+            writer = csv.writer(output)
+            yield output.getvalue()
+            # header
+            output = io.StringIO()
+            writer = csv.writer(output)
+            headers = ["id", "filename", "source", "content_type", "size",
+                       "has_passwords", "has_secrets", "secret_types",
+                       "first_seen", "secrets_detail"]
+            if inc_content:
+                headers.append("content")
+            writer.writerow(headers)
+            yield output.getvalue()
+            for row in rows:
+                output = io.StringIO()
+                writer = csv.writer(output)
+                vals = [row["id"], row["filename"], row["source"], row["content_type"],
+                        row["size"], int(row["has_passwords"]), int(row["has_secrets"]),
+                        ",".join(row["secret_types"]),
+                        row["first_seen"], _fmt_sd(row.get("secrets_detail"))]
+                if inc_content:
+                    vals.append(row.get("content", ""))
+                writer.writerow(vals)
+                yield output.getvalue()
+
+        return StreamingResponse(
+            csv_stream(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=\"blacksignal-export.csv\""},
+        )
 
 
 @app.get("/api/pastes/{paste_id}")

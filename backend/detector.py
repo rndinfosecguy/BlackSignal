@@ -416,6 +416,7 @@ def scan_content(content, scan_limit=None):
                     "type": name,
                     "line": i,
                     "match": group[:120],
+                    "line_text": line,
                 })
 
     for pattern in SEARCH_TERM_PATTERNS:
@@ -425,6 +426,7 @@ def scan_content(content, scan_limit=None):
                     "type": "search_term",
                     "line": i,
                     "match": match.group()[:120],
+                    "line_text": line,
                 })
 
     has_passwords = any(f["type"] == "email:password" for f in findings)

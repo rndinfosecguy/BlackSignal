@@ -253,6 +253,43 @@ def search_pastes(query=None, source=None, content_type=None,
     }
 
 
+def export_pastes(query=None, source=None, content_type=None,
+                  has_secrets=None, secret_types=None, include_content=False):
+    """Generator yielding paste dicts matching the current filters.
+    Used by the /api/pastes/export endpoint — no LIMIT/OFFSET.
+    secrets_detail is parsed into a proper Python list for JSON serialization."""
+    conn = get_conn()
+    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types)
+    where = " AND ".join(conditions) if conditions else "1=1"
+
+    content_col = ", p.content" if include_content else ""
+    data_sql = f"""
+        SELECT p.id, p.filename, p.source, p.content_type, p.size,
+               p.has_passwords, p.has_secrets, p.secret_types, p.secrets_detail,
+               p.first_seen
+               {content_col}
+        FROM pastes p
+        WHERE {where}
+        ORDER BY p.first_seen DESC
+    """
+    import json
+    rows = conn.execute(data_sql, params).fetchall()
+    for row in rows:
+        d = dict(row)
+        st = d.get("secret_types") or ""
+        d["secret_types"] = [x for x in st.split(",") if x] if st else []
+        # Parse secrets_detail from JSON string into proper list
+        sd = d.get("secrets_detail")
+        if sd and sd != "None" and sd != "null":
+            try:
+                d["secrets_detail"] = json.loads(sd) if isinstance(sd, str) else sd
+            except (json.JSONDecodeError, TypeError):
+                d["secrets_detail"] = []
+        else:
+            d["secrets_detail"] = []
+        yield d
+
+
 def get_paste_by_id(paste_id):
     conn = get_conn()
     row = conn.execute("SELECT * FROM pastes WHERE id = ?", (paste_id,)).fetchone()
