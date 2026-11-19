@@ -302,27 +302,42 @@ def get_paste_by_id(paste_id):
     return None
 
 
-def get_sources():
+def get_sources(content_type=None):
     conn = get_conn()
+    where, params = "", []
+    if content_type:
+        where, params = "WHERE content_type = ?", [content_type]
     rows = conn.execute(
-        "SELECT source, COUNT(*) as count FROM pastes GROUP BY source ORDER BY count DESC"
+        f"SELECT source, COUNT(*) as count FROM pastes {where} GROUP BY source ORDER BY count DESC",
+        params
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_content_types():
+def get_content_types(source=None):
     conn = get_conn()
+    where, params = "", []
+    if source:
+        where, params = "WHERE source = ?", [source]
     rows = conn.execute(
-        "SELECT content_type, COUNT(*) as count FROM pastes GROUP BY content_type ORDER BY count DESC"
+        f"SELECT content_type, COUNT(*) as count FROM pastes {where} GROUP BY content_type ORDER BY count DESC",
+        params
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_secret_types():
+def get_secret_types(source=None, content_type=None):
     conn = get_conn()
-    rows = conn.execute(
-        "SELECT secret_types FROM pastes WHERE secret_types != ''"
-    ).fetchall()
+    conditions = ["secret_types != ''"]
+    params = []
+    if source:
+        conditions.append("source = ?")
+        params.append(source)
+    if content_type:
+        conditions.append("content_type = ?")
+        params.append(content_type)
+    where = " AND ".join(conditions)
+    rows = conn.execute(f"SELECT secret_types FROM pastes WHERE {where}", params).fetchall()
 
     counts = {}
     for row in rows:

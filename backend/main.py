@@ -79,14 +79,26 @@ def _get_sources_cached():
     return get_sources()
 
 
+def _get_sources_filtered(content_type: str):
+    return get_sources(content_type=content_type)
+
+
 @lru_cache(maxsize=1)
 def _get_types_cached():
     return get_content_types()
 
 
+def _get_types_filtered(source: str):
+    return get_content_types(source=source)
+
+
 @lru_cache(maxsize=1)
 def _get_secret_types_cached():
     return get_secret_types()
+
+
+def _get_secret_types_filtered(source: str | None = None, content_type: str | None = None):
+    return get_secret_types(source=source, content_type=content_type)
 
 
 def clear_cache():
@@ -144,17 +156,24 @@ def api_stats(
 
 
 @app.get("/api/sources")
-def api_sources():
+def api_sources(content_type: str = Query(None, description="Filter by content type")):
+    if content_type:
+        return _get_sources_filtered(content_type)
     return _get_sources_cached()
 
 
 @app.get("/api/types")
-def api_types():
+def api_types(source: str = Query(None, description="Filter by source")):
+    if source:
+        return _get_types_filtered(source)
     return _get_types_cached()
 
 
 @app.get("/api/secret-types")
-def api_secret_types():
+def api_secret_types(source: str = Query(None, description="Filter by source"),
+                      content_type: str = Query(None, description="Filter by content type")):
+    if source or content_type:
+        return _get_secret_types_filtered(source=source, content_type=content_type)
     return _get_secret_types_cached()
 
 

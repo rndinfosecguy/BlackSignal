@@ -144,6 +144,25 @@ export function usePastes() {
     fetchStats(state)
   }, [fetchPastes, fetchGroupedPastes, fetchStats])
 
+  const fetchSources = useCallback(async (typeFilter?: string) => {
+    const data = await fetchJson<SourceCount[]>(`${API_BASE}/sources${typeFilter ? `?content_type=${encodeURIComponent(typeFilter)}` : ''}`)
+    if (data) setSources(data)
+  }, [])
+
+  const fetchTypes = useCallback(async (sourceFilter?: string) => {
+    const data = await fetchJson<TypeCount[]>(`${API_BASE}/types${sourceFilter ? `?source=${encodeURIComponent(sourceFilter)}` : ''}`)
+    if (data) setTypes(data)
+  }, [])
+
+  const fetchSecretTypes = useCallback(async (sourceFilter?: string, typeFilter?: string) => {
+    const params: string[] = []
+    if (sourceFilter) params.push(`source=${encodeURIComponent(sourceFilter)}`)
+    if (typeFilter) params.push(`content_type=${encodeURIComponent(typeFilter)}`)
+    const qs = params.length > 0 ? `?${params.join('&')}` : ''
+    const data = await fetchJson<SecretTypeCount[]>(`${API_BASE}/secret-types${qs}`)
+    if (data) setSecretTypes(data)
+  }, [])
+
   // Poll index status every 60s; fetch initial data once when the indexer is idle
   useEffect(() => {
     let cancelled = false
@@ -231,7 +250,7 @@ export function usePastes() {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
     lastReindexResult, groupedData,
-    applyFilters, fetchStats, triggerReindex,
+    applyFilters, fetchStats, triggerReindex, fetchSources, fetchTypes, fetchSecretTypes,
   }
 }
 

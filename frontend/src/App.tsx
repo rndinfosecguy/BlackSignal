@@ -16,7 +16,7 @@ export default function App() {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
     lastReindexResult, groupedData,
-    applyFilters, fetchStats, triggerReindex,
+    applyFilters, fetchStats, triggerReindex, fetchSources, fetchTypes, fetchSecretTypes,
   } = usePastes()
 
   const [query, setQuery] = useState('')
@@ -89,7 +89,21 @@ export default function App() {
       page: filterChanged ? 1 : (overrides.page ?? page),
     })
     if (finalGroupBy !== groupBy) setGroupBy(finalGroupBy)
-  }, [applyFilters, query, activeSource, activeType, activeSecretTypes, hasSecrets, groupBy, page])
+
+    // Re-fetch filtered counts when source or type filter changes
+    if (overrides.source !== undefined || overrides.type !== undefined) {
+      if (nextSource || nextType) {
+        fetchSources(nextType)
+        fetchTypes(nextSource)
+        fetchSecretTypes(nextSource, nextType)
+      } else {
+        // Cleared — restore global counts
+        fetchTypes()
+        fetchSources()
+        fetchSecretTypes()
+      }
+    }
+  }, [applyFilters, fetchSources, fetchTypes, fetchSecretTypes, query, activeSource, activeType, activeSecretTypes, hasSecrets, groupBy, page])
 
   const handleSearch = useCallback((q: string) => {
     setQuery(q)

@@ -6,6 +6,16 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.8.0] — 2026-11-19
+
+### Added
+- **Filtered count updates** — when a source or type filter is selected, the chip
+  counts for types, sources, and secret types re-fetch to show counts within the
+  filtered context (e.g. clicking "pastebin" updates type counts to show how many
+  json/text pastes are in pastebin). Global counts are restored when filters clear.
+
+---
+
 ## [1.7.0] — 2026-11-19
 
 ### Added
