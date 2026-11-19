@@ -6,6 +6,15 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.6.1] — 2026-11-19
+
+### Fixed
+- Group buttons (Source / Type) are grayed out and non-clickable when no filters are
+  active — grouping without filters would show the full dataset, which is redundant
+- Grouping auto-switches to "None" when all filters are cleared
+
+---
+
 ## [1.6.0] — 2026-11-17
 
 ### Added

@@ -27,6 +27,11 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [groupBy, setGroupBy] = useState('')
   const [detailId, setDetailId] = useState<string | null>(null)
+
+  // Computed filter state flags (used before the dashboard section)
+  const noFilters = !query && !activeSource && !activeType && activeSecretTypes.length === 0 && !hasSecrets
+  const sourceDisabled = noFilters && groupBy !== 'source'
+  const typeDisabled = noFilters && groupBy !== 'content_type'
   const [currentTab, setCurrentTab] = useState('dashboard')
   const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
   const [reindexToast, setReindexToast] = useState<string | null>(null)
@@ -43,6 +48,17 @@ export default function App() {
   }, [lastReindexResult])
 
   const applyAll = useCallback((overrides: Overrides) => {
+    const nextQuery = overrides.q !== undefined ? overrides.q : query
+    const nextSource = overrides.source !== undefined ? overrides.source : activeSource
+    const nextType = overrides.type !== undefined ? overrides.type : activeType
+    const nextSecretTypes = overrides.secretTypes !== undefined ? overrides.secretTypes : activeSecretTypes
+    const nextHasSecrets = overrides.hasSecrets !== undefined ? overrides.hasSecrets : hasSecrets
+    const nextGroupBy = overrides.groupBy !== undefined ? overrides.groupBy : groupBy
+
+    // When no filters are active, force grouping to None
+    const noActiveFilters = !nextQuery && !nextSource && !nextType && nextSecretTypes.length === 0 && !nextHasSecrets
+    const finalGroupBy = noActiveFilters ? '' : nextGroupBy
+
     const filterChanged =
       overrides.q !== undefined ||
       overrides.source !== undefined ||
@@ -52,14 +68,15 @@ export default function App() {
       overrides.groupBy !== undefined
 
     applyFilters({
-      q: overrides.q !== undefined ? overrides.q : query,
-      source: overrides.source !== undefined ? overrides.source : activeSource,
-      type: overrides.type !== undefined ? overrides.type : activeType,
-      secretTypes: overrides.secretTypes !== undefined ? overrides.secretTypes : activeSecretTypes,
-      hasSecrets: overrides.hasSecrets !== undefined ? overrides.hasSecrets : hasSecrets,
-      groupBy: overrides.groupBy !== undefined ? overrides.groupBy : groupBy,
+      q: nextQuery,
+      source: nextSource,
+      type: nextType,
+      secretTypes: nextSecretTypes,
+      hasSecrets: nextHasSecrets,
+      groupBy: finalGroupBy,
       page: filterChanged ? 1 : (overrides.page ?? page),
     })
+    if (finalGroupBy !== groupBy) setGroupBy(finalGroupBy)
   }, [applyFilters, query, activeSource, activeType, activeSecretTypes, hasSecrets, groupBy, page])
 
   const handleSearch = useCallback((q: string) => {
@@ -219,12 +236,12 @@ export default function App() {
                     className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${!groupBy ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
                     None
                   </button>
-                  <button onClick={() => { setGroupBy('source'); applyAll({ groupBy: 'source' }) }}
-                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                  <button onClick={() => { if (!noFilters || groupBy === 'source') { setGroupBy('source'); applyAll({ groupBy: 'source' }) } }}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all ${sourceDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
                     Source
                   </button>
-                  <button onClick={() => { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) }}
-                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                  <button onClick={() => { if (!noFilters || groupBy === 'content_type') { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) } }}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all ${typeDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
                     Type
                   </button>
                 </div>
@@ -438,7 +455,7 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-medium text-[#00e5ff]">Standard reindex</div>
-                    <div className="text-xs text-[#555555] mt-1">200K limit per file — quick, respects size limits</div>
+                    <div className="text-xs text-[#555555] mt-1">200K limit per file - quick, respects size limits</div>
                   </div>
                   <span className="text-[#00e5ff] text-lg">▶</span>
                 </div>
