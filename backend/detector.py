@@ -376,6 +376,15 @@ def scan_content(content, scan_limit=None):
                     # Skip if local part is a known technical/system user
                     if parts[0].lower() in _TECHNICAL_LOCAL_PARTS:
                         continue
+                    # Skip if domain is a known placeholder or bot domain
+                    domain_full = parts[1].lower()
+                    if domain_full in ('example.com', 'example.org', 'example.net'):
+                        continue
+                    if 'grokbot' in domain_full:
+                        continue
+                    # Skip if local part is very long (UUID / random identifier)
+                    if len(parts[0]) > 25:
+                        continue
 
                 # ── SSN: reject test/placeholder numbers ───────────────────
                 elif name == "ssn":

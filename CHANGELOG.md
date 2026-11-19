@@ -6,6 +6,14 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.8.1] — 2026-11-19
+
+### Fixed
+- Personal email false positives: block `example.com` / `.org` / `.net` placeholder
+  domains, `grokbot` bot addresses, and long local parts (UUIDs / random identifiers)
+
+---
+
 ## [1.8.0] — 2026-11-19
 
 ### Added
