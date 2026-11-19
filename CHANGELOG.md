@@ -6,6 +6,16 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.7.0] — 2026-11-19
+
+### Added
+- **Loading overlay with liquid glass effect** — when a filter/search takes longer than
+  1 second, a full-screen overlay appears with `backdrop-filter: blur(3px)`, a
+  semi-transparent dark background, and a centered spinner with "Loading..." text.
+  Disappears automatically when the response arrives.
+
+---
+
 ## [1.6.1] — 2026-11-19
 
 ### Fixed

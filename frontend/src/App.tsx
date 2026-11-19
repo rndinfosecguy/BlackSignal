@@ -35,6 +35,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard')
   const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
   const [reindexToast, setReindexToast] = useState<string | null>(null)
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false)
 
   // Watch for new reindex results — show a toast until dismissed
   useEffect(() => {
@@ -46,6 +47,17 @@ export default function App() {
     if (parts.length === 0) parts.push('no changes')
     setReindexToast(`Reindex complete: ${parts.join(', ')}`)
   }, [lastReindexResult])
+
+  // Show loading overlay when filters take > 1 second
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    if (loading) {
+      timer = setTimeout(() => setShowLoadingOverlay(true), 1000)
+    } else {
+      setShowLoadingOverlay(false)
+    }
+    return () => { if (timer) clearTimeout(timer) }
+  }, [loading])
 
   const applyAll = useCallback((overrides: Overrides) => {
     const nextQuery = overrides.q !== undefined ? overrides.q : query
@@ -257,6 +269,20 @@ export default function App() {
                   </a>
                 </div>
               </div>
+
+              {/* Loading overlay with liquid glass effect */}
+              {showLoadingOverlay && (
+                <div className="fixed inset-0 z-30 flex items-center justify-center bg-[#0d0d0d]/40"
+                  style={{ backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)' }}>
+                  <div className="relative flex flex-col items-center gap-4">
+                    {/* Spinner */}
+                    <div className="w-10 h-10 rounded-full border-2 border-transparent border-t-[#00e5ff] border-r-[#00e5ff]/60 animate-spin"
+                      style={{ animation: 'spin 0.8s linear infinite' }} />
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    <div className="text-xs text-[#555555]">Loading...</div>
+                  </div>
+                </div>
+              )}
 
               {loading && pastes.length === 0 && groupedData === null ? (
                 <div className="flex items-center justify-center h-32 text-[#555555]">Loading pastes...</div>
