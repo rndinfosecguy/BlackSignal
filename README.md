@@ -33,8 +33,9 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 - **Syntax highlighting** — highlight.js for different coding languages
 - **Dashboard** — overview tab showing technical and personal detection rates, source/type distributions, and per-type breakdowns
 - **Comprehensive reindex** — optional full-content scan mode (bypasses size limits) for deep inspection of large files
-- **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
 - **Periodic re-indexing** — automatic daily scan for new/changed pastes
+- **Export findings** — download search results as CSV or JSON with the current filter state
+- **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
 
 ## Tech Stack
 
@@ -150,23 +151,26 @@ Visit `http://localhost:9090`
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/pastes` | Paginated/searchable list. Params: `q`, `source`, `content_type`, `has_secrets`, `secret_type` (repeatable, OR), `page`, `per_page`, `group_by` (source or content_type) |
-| GET | `/api/pastes/export` | Export search results as CSV or JSON. Params: same as `/api/pastes` (except `page`, `per_page`) + `format=csv|json` (default csv) + `include_content=true|false` (default false) |
+| GET | `/api/openapi.json` | Raw OpenAPI schema (machine-readable) |
+| GET | `/api/docs` | Swagger UI — interactive API explorer |
+| GET | `/api/redoc` | ReDoc — clean scrollable API docs |
+| GET | `/api/pastes` | Paginated/searchable list. Params: `q`, `source` (repeatable), `content_type` (repeatable), `has_secrets`, `secret_type` (repeatable, OR), `page`, `per_page`, `group_by` (source or content_type), `date_from` (YYYY-MM-DD), `date_to` (YYYY-MM-DD) |
+| GET | `/api/pastes/export` | Export search results as CSV or JSON. Params: same as `/api/pastes` (except `page`, `per_page`) + `format=csv|json` (default csv) + `include_content=true|false` (default false) + `date_from`, `date_to` |
 | GET | `/api/pastes/{id}` | Full paste content + detected secrets |
-| GET | `/api/stats` | Filter-aware counts (past/secrets/passwords/sources) |
-| GET | `/api/sources` | Source distribution |
-| GET | `/api/types` | Content-type distribution |
-| GET | `/api/secret-types` | Detected secret categories with counts |
+| GET | `/api/stats` | Filter-aware counts (pastes/secrets/passwords/sources). Params: same filter params as `/api/pastes` (no pagination) |
+| GET | `/api/sources` | Source distribution. Optional: `?content_type=` |
+| GET | `/api/types` | Content-type distribution. Optional: `?source=` |
+| GET | `/api/secret-types` | Detected secret categories with counts. Optional: `?source=`, `?content_type=` |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
 | GET | `/api/version` | App version: `{ version: "1.12.0" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
 
-Example:
+Example - export CSV with source and date range:
 
 ```bash
 curl -u admin:PASSWORD \
-  "http://localhost:9090/api/pastes?q=apikey&has_secrets=true&secret_type=aws_key&per_page=50"
+  "http://localhost:9090/api/pastes/export?format=csv&source=pastebin&source=github&date_from=2026-11-01&date_to=2026-11-21"
 ```
 
 ## Disclaimer
