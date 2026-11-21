@@ -20,20 +20,16 @@ export default function App() {
   } = usePastes()
 
   const [query, setQuery] = useState('')
-  const [activeSource, setActiveSource] = useState('')
-  const [activeType, setActiveType] = useState('')
+  const [activeSources, setActiveSources] = useState<string[]>([])
+  const [activeTypes, setActiveTypes] = useState<string[]>([])
   const [activeSecretTypes, setActiveSecretTypes] = useState<string[]>([])
   const [hasSecrets, setHasSecrets] = useState(false)
-  const [categoryFilter, setCategoryFilter] = useState('all')
   const [groupBy, setGroupBy] = useState('')
   const [detailId, setDetailId] = useState<string | null>(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
   // Computed filter state flags (used before the dashboard section)
-  const noFilters = !query && !activeSource && !activeType && activeSecretTypes.length === 0 && !hasSecrets && !dateFrom && !dateTo
-  const sourceDisabled = noFilters && groupBy !== 'source'
-  const typeDisabled = noFilters && groupBy !== 'content_type'
   const [currentTab, setCurrentTab] = useState('dashboard')
   const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
   const [reindexToast, setReindexToast] = useState<string | null>(null)
@@ -63,22 +59,18 @@ export default function App() {
 
   const applyAll = useCallback((overrides: Overrides) => {
     const nextQuery = overrides.q !== undefined ? overrides.q : query
-    const nextSource = overrides.source !== undefined ? overrides.source : activeSource
-    const nextType = overrides.type !== undefined ? overrides.type : activeType
+    const nextSources = overrides.sources !== undefined ? overrides.sources : activeSources
+    const nextTypes = overrides.types !== undefined ? overrides.types : activeTypes
     const nextSecretTypes = overrides.secretTypes !== undefined ? overrides.secretTypes : activeSecretTypes
     const nextHasSecrets = overrides.hasSecrets !== undefined ? overrides.hasSecrets : hasSecrets
     const nextGroupBy = overrides.groupBy !== undefined ? overrides.groupBy : groupBy
     const nextDateFrom = overrides.dateFrom !== undefined ? overrides.dateFrom : dateFrom
     const nextDateTo = overrides.dateTo !== undefined ? overrides.dateTo : dateTo
 
-    // When no filters are active, force grouping to None
-    const noActiveFilters = !nextQuery && !nextSource && !nextType && nextSecretTypes.length === 0 && !nextHasSecrets && !nextDateFrom && !nextDateTo
-    const finalGroupBy = noActiveFilters ? '' : nextGroupBy
-
     const filterChanged =
       overrides.q !== undefined ||
-      overrides.source !== undefined ||
-      overrides.type !== undefined ||
+      overrides.sources !== undefined ||
+      overrides.types !== undefined ||
       overrides.secretTypes !== undefined ||
       overrides.hasSecrets !== undefined ||
       overrides.groupBy !== undefined ||
@@ -87,46 +79,54 @@ export default function App() {
 
     applyFilters({
       q: nextQuery,
-      source: nextSource,
-      type: nextType,
+      sources: nextSources,
+      types: nextTypes,
       secretTypes: nextSecretTypes,
       hasSecrets: nextHasSecrets,
-      groupBy: finalGroupBy,
+      groupBy: nextGroupBy,
       dateFrom: nextDateFrom,
       dateTo: nextDateTo,
       page: filterChanged ? 1 : (overrides.page ?? page),
     })
-    if (finalGroupBy !== groupBy) setGroupBy(finalGroupBy)
+    if (nextGroupBy !== groupBy) setGroupBy(nextGroupBy)
 
     // Re-fetch filtered counts when source or type filter changes
-    if (overrides.source !== undefined || overrides.type !== undefined) {
-      if (nextSource || nextType) {
-        fetchSources(nextType)
-        fetchTypes(nextSource)
-        fetchSecretTypes(nextSource, nextType)
+    if (overrides.sources !== undefined || overrides.types !== undefined) {
+      const hasSource = nextSources.length > 0
+      const hasType = nextTypes.length > 0
+      if (hasSource || hasType) {
+        fetchTypes(nextSources)
+        fetchSources(nextTypes)
+        fetchSecretTypes(hasSource ? nextSources : undefined, hasType ? nextTypes : undefined)
       } else {
-        // Cleared — restore global counts
         fetchTypes()
         fetchSources()
         fetchSecretTypes()
       }
     }
-  }, [applyFilters, fetchSources, fetchTypes, fetchSecretTypes, query, activeSource, activeType, activeSecretTypes, hasSecrets, groupBy, dateFrom, dateTo, page])
+  }, [applyFilters, fetchSources, fetchTypes, fetchSecretTypes, query, activeSources, activeTypes, activeSecretTypes, hasSecrets, groupBy, dateFrom, dateTo, page])
 
   const handleSearch = useCallback((q: string) => {
     setQuery(q)
     applyAll({ q })
   }, [applyAll])
 
-  const handleSourceChange = useCallback((s: string) => {
-    setActiveSource(s)
-    applyAll({ source: s })
-  }, [applyAll])
-
-  const handleTypeChange = useCallback((t: string) => {
-    setActiveType(t)
-    applyAll({ type: t })
-  }, [applyAll])
+  const handleFiltersBatch = useCallback((filters: { sources?: string[]; types?: string[]; secretTypes?: string[]; hasSecrets?: boolean; dateFrom?: string; dateTo?: string }) => {
+    if (filters.sources !== undefined) setActiveSources(filters.sources)
+    if (filters.types !== undefined) setActiveTypes(filters.types)
+    if (filters.secretTypes !== undefined) setActiveSecretTypes(filters.secretTypes)
+    if (filters.hasSecrets !== undefined) setHasSecrets(filters.hasSecrets)
+    if (filters.dateFrom !== undefined) setDateFrom(filters.dateFrom)
+    if (filters.dateTo !== undefined) setDateTo(filters.dateTo)
+    applyAll({
+      sources: filters.sources !== undefined ? filters.sources : activeSources,
+      types: filters.types !== undefined ? filters.types : activeTypes,
+      secretTypes: filters.secretTypes !== undefined ? filters.secretTypes : activeSecretTypes,
+      hasSecrets: filters.hasSecrets !== undefined ? filters.hasSecrets : hasSecrets,
+      dateFrom: filters.dateFrom !== undefined ? filters.dateFrom : dateFrom,
+      dateTo: filters.dateTo !== undefined ? filters.dateTo : dateTo,
+    })
+  }, [applyAll, activeSources, activeTypes, activeSecretTypes, hasSecrets, dateFrom, dateTo])
 
   const handleSecretTypeToggle = useCallback((st: string) => {
     const next = activeSecretTypes.includes(st)
@@ -135,6 +135,11 @@ export default function App() {
     setActiveSecretTypes(next)
     applyAll({ secretTypes: next })
   }, [applyAll, activeSecretTypes])
+
+  const handleSecretTypesBatch = useCallback((next: string[]) => {
+    setActiveSecretTypes(next)
+    applyAll({ secretTypes: next })
+  }, [applyAll])
 
   const handleSecretTypeClear = useCallback(() => {
     setActiveSecretTypes([])
@@ -221,7 +226,7 @@ export default function App() {
               className={`text-sm px-4 py-2 ${currentTab === 'dashboard' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Dashboard
             </button>
-            <button onClick={() => { fetchStats({ q: query, source: activeSource, type: activeType, secretTypes: activeSecretTypes.length > 0 ? activeSecretTypes : undefined, hasSecrets, dateFrom, dateTo }); setCurrentTab('pastes') }}
+            <button onClick={() => { fetchStats({ q: query, sources: activeSources, types: activeTypes, secretTypes: activeSecretTypes.length > 0 ? activeSecretTypes : undefined, hasSecrets, dateFrom, dateTo }); setCurrentTab('pastes') }}
               className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Pastes
             </button>
@@ -247,35 +252,22 @@ export default function App() {
                 sources={sources}
                 types={types}
                 secretTypes={secretTypes}
-                activeSource={activeSource}
-                activeType={activeType}
+                activeSources={activeSources}
+                activeTypes={activeTypes}
                 activeSecretTypes={activeSecretTypes}
                 hasSecrets={hasSecrets}
-                categoryFilter={categoryFilter}
-                onSourceChange={handleSourceChange}
-                onTypeChange={handleTypeChange}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onSourcesChange={(s) => { setActiveSources(s); applyAll({ sources: s }) }}
+                onTypesChange={(t) => { setActiveTypes(t); applyAll({ types: t }) }}
                 onSecretTypeToggle={handleSecretTypeToggle}
+                onSecretTypesBatch={handleSecretTypesBatch}
+                onFiltersBatch={handleFiltersBatch}
                 onSecretTypeClear={handleSecretTypeClear}
                 onHasSecretsToggle={handleHasSecretsToggle}
-                onCategoryFilterChange={setCategoryFilter}
+                onDateFromChange={(d) => { setDateFrom(d); applyAll({ dateFrom: d }) }}
+                onDateToChange={(d) => { setDateTo(d); applyAll({ dateTo: d }) }}
               />
-            </div>
-
-            <div className="flex flex-wrap gap-2 items-center mb-2">
-              <span className="text-xs text-[#444444] mr-1">Date</span>
-              <input type="date" value={dateFrom}
-                onChange={e => { setDateFrom(e.target.value); applyAll({ dateFrom: e.target.value }) }}
-                className="text-xs px-3 py-1.5 rounded-md border border-[#222222] bg-transparent text-[#888888] outline-none [color-scheme:dark] w-36" />
-              <span className="text-xs text-[#444444]">to</span>
-              <input type="date" value={dateTo}
-                onChange={e => { setDateTo(e.target.value); applyAll({ dateTo: e.target.value }) }}
-                className="text-xs px-3 py-1.5 rounded-md border border-[#222222] bg-transparent text-[#888888] outline-none [color-scheme:dark] w-36" />
-              {(dateFrom || dateTo) && (
-                <button onClick={() => { setDateFrom(''); setDateTo(''); applyAll({ dateFrom: '', dateTo: '' }) }}
-                  className="text-xs px-3 py-1.5 rounded-md border border-[#ff004d] text-[#ff004d] hover:bg-[#ff004d]/5 transition-all cursor-pointer">
-                  Clear
-                </button>
-              )}
             </div>
 
             <div className="space-y-3">
@@ -287,22 +279,22 @@ export default function App() {
                     className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${!groupBy ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
                     None
                   </button>
-                  <button onClick={() => { if (!noFilters || groupBy === 'source') { setGroupBy('source'); applyAll({ groupBy: 'source' }) } }}
-                    className={`text-xs px-3 py-1.5 rounded-md border transition-all ${sourceDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
+                  <button onClick={() => { setGroupBy('source'); applyAll({ groupBy: 'source' }) }}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
                     Source
                   </button>
-                  <button onClick={() => { if (!noFilters || groupBy === 'content_type') { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) } }}
-                    className={`text-xs px-3 py-1.5 rounded-md border transition-all ${typeDisabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
+                  <button onClick={() => { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) }}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
                     Type
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs text-[#444444] mr-1">Export</span>
-                  <a href={`/api/pastes/export?format=csv${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSource ? `&source=${encodeURIComponent(activeSource)}` : ''}${activeType ? `&content_type=${encodeURIComponent(activeType)}` : ''}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
+                  <a href={`/api/pastes/export?format=csv${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSources.map(s => `&source=${encodeURIComponent(s)}`).join('')}${activeTypes.map(t => `&content_type=${encodeURIComponent(t)}`).join('')}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
                     className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888] transition-all cursor-pointer no-underline">
                     CSV
                   </a>
-                  <a href={`/api/pastes/export?format=json${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSource ? `&source=${encodeURIComponent(activeSource)}` : ''}${activeType ? `&content_type=${encodeURIComponent(activeType)}` : ''}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
+                  <a href={`/api/pastes/export?format=json${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSources.map(s => `&source=${encodeURIComponent(s)}`).join('')}${activeTypes.map(t => `&content_type=${encodeURIComponent(t)}`).join('')}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
                     className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888] transition-all cursor-pointer no-underline">
                     JSON
                   </a>
@@ -341,8 +333,8 @@ export default function App() {
                       </div>
                       {g.total > g.results.length && (
                         <button onClick={() => {
-                          if (groupBy === 'source') { setActiveSource(g.key); applyAll({ source: g.key }) }
-                          else { setActiveType(g.key); applyAll({ type: g.key }) }
+                          if (groupBy === 'source') { setActiveSources([g.key]); applyAll({ sources: [g.key] }) }
+                          else { setActiveTypes([g.key]); applyAll({ types: [g.key] }) }
                         }}
                           className="w-full mt-2 text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#777777] hover:border-[#444444] transition-all cursor-pointer">
                           View all {g.total.toLocaleString()} results

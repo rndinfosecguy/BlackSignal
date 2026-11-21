@@ -22,8 +22,8 @@ def get_conn():
 
 def build_filter_conditions(
     query: Optional[str] = None,
-    source: Optional[str] = None,
-    content_type: Optional[str] = None,
+    source: Optional[list[str]] = None,
+    content_type: Optional[list[str]] = None,
     has_secrets: Optional[bool] = None,
     secret_types: Optional[list[str]] = None,
     date_from: Optional[str] = None,
@@ -35,11 +35,13 @@ def build_filter_conditions(
         conditions.append("p.id IN (SELECT id FROM pastes_fts WHERE pastes_fts MATCH ?)")
         params.append(query)
     if source:
-        conditions.append("p.source = ?")
-        params.append(source)
+        placeholders = ",".join("?" for _ in source)
+        conditions.append(f"p.source IN ({placeholders})")
+        params.extend(source)
     if content_type:
-        conditions.append("p.content_type = ?")
-        params.append(content_type)
+        placeholders = ",".join("?" for _ in content_type)
+        conditions.append(f"p.content_type IN ({placeholders})")
+        params.extend(content_type)
     if has_secrets is not None:
         conditions.append("p.has_secrets = ?")
         params.append(1 if has_secrets else 0)

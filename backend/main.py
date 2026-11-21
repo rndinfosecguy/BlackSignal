@@ -143,8 +143,8 @@ app.add_middleware(
 @app.get("/api/stats")
 def api_stats(
     q: str = Query("", description="Search query"),
-    source: str = Query(None, description="Source filter"),
-    content_type: str = Query(None, description="Content type filter"),
+    source: list[str] = Query([], description="Source filter (repeatable)"),
+    content_type: list[str] = Query([], description="Content type filter (repeatable)"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
@@ -152,8 +152,8 @@ def api_stats(
 ):
     return _get_stats_cached(
         normalize_fts_query(q),
-        source,
-        content_type,
+        tuple(source) if source else None,
+        tuple(content_type) if content_type else None,
         _parse_bool(has_secrets),
         tuple(secret_type),
         date_from,
@@ -186,8 +186,8 @@ def api_secret_types(source: str = Query(None, description="Filter by source"),
 @app.get("/api/pastes")
 def api_search(
     q: str = Query("", description="Search query"),
-    source: str = Query(None, description="Source filter"),
-    content_type: str = Query(None, description="Content type filter"),
+    source: list[str] = Query([], description="Source filter (repeatable)"),
+    content_type: list[str] = Query([], description="Content type filter (repeatable)"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     page: int = Query(1, ge=1),
@@ -200,8 +200,8 @@ def api_search(
         return search_pastes_grouped(
             group_by=group_by,
             query=normalize_fts_query(q),
-            source=source,
-            content_type=content_type,
+            source=source or None,
+            content_type=content_type or None,
             has_secrets=_parse_bool(has_secrets),
             secret_types=secret_type if secret_type else None,
             date_from=date_from,
@@ -209,8 +209,8 @@ def api_search(
         )
     return search_pastes(
         query=normalize_fts_query(q),
-        source=source,
-        content_type=content_type,
+        source=source or None,
+        content_type=content_type or None,
         has_secrets=_parse_bool(has_secrets),
         secret_types=secret_type if secret_type else None,
         page=page,
@@ -224,8 +224,8 @@ def api_search(
 def api_pastes_export(
     format: str = Query("csv", description="Export format: 'csv' or 'json'"),
     q: str = Query("", description="Search query"),
-    source: str = Query(None, description="Source filter"),
-    content_type: str = Query(None, description="Content type filter"),
+    source: list[str] = Query([], description="Source filter (repeatable)"),
+    content_type: list[str] = Query([], description="Content type filter (repeatable)"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     include_content: str = Query("false", description="Include full paste content ('true' or 'false')"),
@@ -239,7 +239,7 @@ def api_pastes_export(
     inc_content = _parse_bool(include_content)
     secret_types = secret_type if secret_type else None
 
-    rows = list(export_pastes(query=query, source=source, content_type=content_type,
+    rows = list(export_pastes(query=query, source=source or None, content_type=content_type or None,
                               has_secrets=has_sec, secret_types=secret_types,
                               include_content=inc_content,
                               date_from=date_from, date_to=date_to))

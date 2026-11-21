@@ -4,8 +4,8 @@ const API_BASE = '/api'
 
 export interface FilterState {
   q?: string
-  source?: string
-  type?: string
+  sources?: string[]
+  types?: string[]
   secretTypes?: string[]
   hasSecrets?: boolean
   page?: number
@@ -44,8 +44,8 @@ const defaultIndexStatus: IndexStatus = { running: false, current: 0, total: 0, 
 function queryString(state: FilterState): string {
   const qp = new URLSearchParams()
   if (state.q) qp.set('q', state.q)
-  if (state.source) qp.set('source', state.source)
-  if (state.type) qp.set('content_type', state.type)
+  if (state.sources) state.sources.forEach(s => qp.append('source', s))
+  if (state.types) state.types.forEach(t => qp.append('content_type', t))
   if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
   if (state.hasSecrets) qp.set('has_secrets', 'true')
   if (state.groupBy) qp.set('group_by', state.groupBy)
@@ -148,20 +148,22 @@ export function usePastes() {
     fetchStats(state)
   }, [fetchPastes, fetchGroupedPastes, fetchStats])
 
-  const fetchSources = useCallback(async (typeFilter?: string) => {
-    const data = await fetchJson<SourceCount[]>(`${API_BASE}/sources${typeFilter ? `?content_type=${encodeURIComponent(typeFilter)}` : ''}`)
+  const fetchSources = useCallback(async (typeFilter?: string[]) => {
+    const qs = typeFilter && typeFilter.length > 0 ? `?content_type=${encodeURIComponent(typeFilter[0])}` : ''
+    const data = await fetchJson<SourceCount[]>(`${API_BASE}/sources${qs}`)
     if (data) setSources(data)
   }, [])
 
-  const fetchTypes = useCallback(async (sourceFilter?: string) => {
-    const data = await fetchJson<TypeCount[]>(`${API_BASE}/types${sourceFilter ? `?source=${encodeURIComponent(sourceFilter)}` : ''}`)
+  const fetchTypes = useCallback(async (sourceFilter?: string[]) => {
+    const qs = sourceFilter && sourceFilter.length > 0 ? `?source=${encodeURIComponent(sourceFilter[0])}` : ''
+    const data = await fetchJson<TypeCount[]>(`${API_BASE}/types${qs}`)
     if (data) setTypes(data)
   }, [])
 
-  const fetchSecretTypes = useCallback(async (sourceFilter?: string, typeFilter?: string) => {
+  const fetchSecretTypes = useCallback(async (sourceFilter?: string[], typeFilter?: string[]) => {
     const params: string[] = []
-    if (sourceFilter) params.push(`source=${encodeURIComponent(sourceFilter)}`)
-    if (typeFilter) params.push(`content_type=${encodeURIComponent(typeFilter)}`)
+    if (sourceFilter && sourceFilter.length > 0) params.push(`source=${encodeURIComponent(sourceFilter[0])}`)
+    if (typeFilter && typeFilter.length > 0) params.push(`content_type=${encodeURIComponent(typeFilter[0])}`)
     const qs = params.length > 0 ? `?${params.join('&')}` : ''
     const data = await fetchJson<SecretTypeCount[]>(`${API_BASE}/secret-types${qs}`)
     if (data) setSecretTypes(data)

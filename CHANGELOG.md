@@ -6,6 +6,33 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.12.0] — 2026-11-21
+
+### Added
+- **macOS-style command palette filter overlay** — clicking `+ Add filter` opens
+  a floating overlay with a blurred backdrop. Category grid (Source / Type / Secrets /
+  Date range) leads to chip selection. Filters are batched — changes only apply when
+  the overlay closes.
+- **Multi-select source and type filters** — `source` and `content_type` API params
+  changed from single strings to repeatable lists. Multiple sources or types can be
+  selected simultaneously and are combined with `IN (...)` SQL.
+- **`fully_scanned` flag** — tracks whether a paste was fully scanned (comprehensive)
+  or partially (default 200K limit). "Partially scanned" badge in detail view respects
+  this flag.
+- **Date range filter** — filter pastes by `first_seen` range with efficient index
+  scans. Available via query params `date_from` / `date_to` and the filter overlay.
+- **Indexed timestamp display** — paste cards and detail view show `Indexed: YYYY-MM-DD`
+  next to the file size.
+
+### Changed
+- Source and Type filter pills no longer grey out in the `+ Add filter` menu —
+  multi-select means you can always add more.
+- "Has secrets" replaces "Secrets only" for clarity.
+- Filter changes are batched on overlay close — one API call per category instead of
+  one per chip click.
+
+---
+
 ## [1.11.0] — 2026-11-21
 
 ### Added

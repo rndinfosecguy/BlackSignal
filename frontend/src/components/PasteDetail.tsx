@@ -140,7 +140,7 @@ export default function PasteDetail({ id, onClose }: Props) {
             <span className="text-sm text-[#e8e8e8] font-medium">{paste?.source || 'Paste Detail'}</span>
             <span className="text-xs text-[#666666]">{paste?.content_type}</span>
             <span className="text-xs text-[#555555]" style={{ fontFamily: 'var(--font-mono)' }}>{paste?.filename}</span>
-            <span className="text-[10px] text-[#444444]">Indexed: {paste.first_seen.slice(0, 10)}</span>
+            <span className="text-[10px] text-[#444444]">Indexed: {paste?.first_seen?.slice(0, 10)}</span>
             <span className="text-[10px] text-[#444444]">{formatSize(paste?.size || 0)}</span>
             {paste?.content && paste.content.length > SCAN_LIMIT && !paste.fully_scanned && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ffd700]/10 text-[#ffd700]/80 whitespace-nowrap"
