@@ -408,3 +408,11 @@ def get_indexed_ids():
     conn = get_conn()
     rows = conn.execute("SELECT id FROM pastes").fetchall()
     return {r["id"] for r in rows}
+
+
+def get_indexed_mtimes():
+    """Return {id: modified_at} for all indexed pastes.
+    Used by incremental reindex to skip unchanged files."""
+    conn = get_conn()
+    rows = conn.execute("SELECT id, modified_at FROM pastes WHERE modified_at IS NOT NULL AND modified_at != ''").fetchall()
+    return {r["id"]: r["modified_at"] for r in rows}

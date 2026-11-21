@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from indexer import walk_pastes, detect_content_type
-from database import upsert_paste, get_indexed_ids, delete_paste, get_conn
+from database import upsert_paste, get_indexed_ids, get_indexed_mtimes, delete_paste, get_conn
 from detector import scan_content
 
 logger = logging.getLogger("blacksignal")
@@ -100,9 +100,10 @@ def _process_single(f, scan_limit=None):
         return {"id": f["id"], "error": str(e)}
 
 
-def index_all_pastes(scan_limit=None):
+def index_all_pastes(scan_limit=None, incremental=False):
     """Index all paste files. 
-    scan_limit — max chars to scan per file (None = default 200K, 0 = unlimited)."""
+    scan_limit — max chars to scan per file (None = default 200K, 0 = unlimited).
+    incremental — when True, skip files whose mtime hasn't changed since last index."""
     if not _index_lock.acquire(blocking=False):
         logger.info("Index already in progress, skipping")
         return
@@ -114,6 +115,10 @@ def index_all_pastes(scan_limit=None):
         current_ids = set()
         indexed_count = 0
         deleted_count = 0
+
+        # In incremental mode, also look up stored mtimes to skip unchanged files
+        indexed_mtimes = get_indexed_mtimes() if incremental else {}
+
         total_files = len(files)
 
         _index_progress.update(current=0, total=total_files, phase="indexing")
@@ -132,6 +137,20 @@ def index_all_pastes(scan_limit=None):
             if recheck_ids:
                 logger.info("Comprehensive: re-processing %d files that exceeded the size limit", len(recheck_ids))
             indexed_ids -= recheck_ids
+
+        # In incremental mode, skip files whose mtime hasn't changed
+        if indexed_mtimes:
+            skip_count = 0
+            for f in files:
+                if f["id"] in indexed_ids and f["id"] in indexed_mtimes:
+                    if f["modified_at"] == indexed_mtimes[f["id"]]:
+                        indexed_ids.add(f["id"])  # keep it in the indexed set — skip it
+                        skip_count += 1
+                    else:
+                        # mtime changed — remove from indexed_ids so it gets re-processed
+                        indexed_ids.discard(f["id"])
+            if skip_count:
+                logger.info("Incremental: skipping %d unchanged files", skip_count)
 
         # Collect files that actually need processing (preserving order)
         new_files = [f for f in files if f["id"] not in indexed_ids]
@@ -294,6 +313,7 @@ def start_scheduler(interval_seconds=300):
         seconds=interval_seconds,
         id="reindex",
         replace_existing=True,
+        kwargs={"incremental": True},
     )
     scheduler.start()
     logger.info("Scheduler started: re-index every %d seconds", interval_seconds)

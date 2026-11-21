@@ -6,6 +6,16 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.9.0] — 2026-11-21
+
+### Added
+- **Incremental auto-reindex** — the 24h scheduled reindex now only re-processes
+  files whose `mtime` has changed. Unchanged files are skipped entirely (no disk I/O,
+  no regex scanning). Manual reindexes (standard, comprehensive, purge) are unaffected
+  and still perform a full scan.
+
+---
+
 ## [1.8.1] — 2026-11-19
 
 ### Fixed
