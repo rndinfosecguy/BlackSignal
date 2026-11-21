@@ -4,6 +4,7 @@ import { sourceColor, formatSize } from '../lib/utils'
 interface Props {
   id: string; filename: string; source: string; content_type: string; size: number
   has_passwords: boolean; has_secrets: boolean; secret_types: string[]; snippet: string
+  first_seen: string
   onClick: (id: string) => void
 }
 
@@ -15,8 +16,11 @@ const SOURCE_NAMES: Record<string, string> = {
 }
 
 export default memo(function PasteCard(props: Props) {
-  const { id, filename, source, content_type, size, has_passwords, has_secrets, secret_types, snippet, onClick } = props
+  const { id, filename, source, content_type, size, has_passwords, has_secrets, secret_types, snippet, first_seen, onClick } = props
   const secretTypes = (secret_types || []).slice(0, 3)
+
+  // Format first_seen to a short readable date
+  const indexedDate = first_seen ? first_seen.slice(0, 10) : ''
 
   return (
     <div
@@ -32,6 +36,7 @@ export default memo(function PasteCard(props: Props) {
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {indexedDate && <span className="text-[10px] text-[#444444]">Indexed: {indexedDate}</span>}
           <span className="text-xs text-[#555555]">{formatSize(size)}</span>
         </div>
       </div>

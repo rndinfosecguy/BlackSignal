@@ -6,6 +6,17 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.11.0] — 2026-11-21
+
+### Added
+- **Date range filter** — filter pastes by `first_seen` range via two date inputs or
+  query params `date_from` / `date_to` on `/api/pastes`, `/api/stats`,
+  `/api/pastes/export`. Efficient range scans on the existing `first_seen DESC` index.
+- **Indexed timestamp display** — paste cards and detail view show `Indexed: YYYY-MM-DD`
+  to indicate when the system first analyzed the paste, next to the file size.
+
+---
+
 ## [1.10.1] — 2026-11-21
 
 ### Fixed

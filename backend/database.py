@@ -26,6 +26,8 @@ def build_filter_conditions(
     content_type: Optional[str] = None,
     has_secrets: Optional[bool] = None,
     secret_types: Optional[list[str]] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ):
     conditions = []
     params = []
@@ -51,6 +53,15 @@ def build_filter_conditions(
             )
             params.extend([f'{st},%', f'%,{st},%', f'%,{st}', st])
         conditions.append(f"({' OR '.join(st_clauses)})")
+    if date_from:
+        conditions.append("p.first_seen >= ?")
+        params.append(date_from)
+    if date_to:
+        # If no time component, extend to end of day for inclusive filtering
+        if ' ' not in date_to:
+            date_to = date_to + ' 23:59:59'
+        conditions.append("p.first_seen <= ?")
+        params.append(date_to)
     return conditions, params
 
 
@@ -169,11 +180,12 @@ def delete_paste(paste_id, commit=True):
 
 
 def search_pastes_grouped(group_by, query=None, source=None, content_type=None,
-                          has_secrets=None, secret_types=None, per_group=5):
+                          has_secrets=None, secret_types=None, per_group=5,
+                          date_from=None, date_to=None):
     """Search pastes grouped by a column (source or content_type).
     Returns top 10 groups, each with up to `per_group` results."""
     conn = get_conn()
-    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types)
+    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types, date_from=date_from, date_to=date_to)
     where = " AND ".join(conditions) if conditions else "1=1"
 
     # Validate group_by column
@@ -224,9 +236,9 @@ def search_pastes_grouped(group_by, query=None, source=None, content_type=None,
 
 def search_pastes(query=None, source=None, content_type=None,
                   has_secrets=None, secret_types=None,
-                  page=1, per_page=50):
+                  page=1, per_page=50, date_from=None, date_to=None):
     conn = get_conn()
-    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types)
+    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types, date_from=date_from, date_to=date_to)
     where = " AND ".join(conditions) if conditions else "1=1"
     offset = (page - 1) * per_page
 
@@ -262,12 +274,13 @@ def search_pastes(query=None, source=None, content_type=None,
 
 
 def export_pastes(query=None, source=None, content_type=None,
-                  has_secrets=None, secret_types=None, include_content=False):
+                  has_secrets=None, secret_types=None, include_content=False,
+                  date_from=None, date_to=None):
     """Generator yielding paste dicts matching the current filters.
     Used by the /api/pastes/export endpoint — no LIMIT/OFFSET.
     secrets_detail is parsed into a proper Python list for JSON serialization."""
     conn = get_conn()
-    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types)
+    conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types, date_from=date_from, date_to=date_to)
     where = " AND ".join(conditions) if conditions else "1=1"
 
     content_col = ", p.content" if include_content else ""

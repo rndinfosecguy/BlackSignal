@@ -61,13 +61,15 @@ def normalize_fts_query(q: str) -> str | None:
 # lru_cache bounded by the number of distinct filter combinations is safe.
 
 @lru_cache(maxsize=256)
-def _get_stats_cached(query, source, content_type, has_secrets, secret_types):
+def _get_stats_cached(query, source, content_type, has_secrets, secret_types, date_from, date_to):
     conditions, params = build_filter_conditions(
         query=query,
         source=source,
         content_type=content_type,
         has_secrets=has_secrets,
         secret_types=secret_types,
+        date_from=date_from,
+        date_to=date_to,
     )
     if conditions:
         return get_stats_filtered(conditions, params)
@@ -112,7 +114,7 @@ async def lifespan(app: FastAPI):
     init_db()
 
     # Pre-compute unfiltered stats so the first user never hits the cold path
-    _get_stats_cached(None, None, None, None, ())
+    _get_stats_cached(None, None, None, None, (), None, None)
 
     threading.Thread(target=index_all_pastes, daemon=True).start()
     start_scheduler(REINDEX_INTERVAL)
@@ -145,6 +147,8 @@ def api_stats(
     content_type: str = Query(None, description="Content type filter"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
+    date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
+    date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
     return _get_stats_cached(
         normalize_fts_query(q),
@@ -152,6 +156,8 @@ def api_stats(
         content_type,
         _parse_bool(has_secrets),
         tuple(secret_type),
+        date_from,
+        date_to,
     )
 
 
@@ -187,6 +193,8 @@ def api_search(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     group_by: str = Query(None, description="Group results by column (source, content_type)"),
+    date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
+    date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
     if group_by:
         return search_pastes_grouped(
@@ -196,6 +204,8 @@ def api_search(
             content_type=content_type,
             has_secrets=_parse_bool(has_secrets),
             secret_types=secret_type if secret_type else None,
+            date_from=date_from,
+            date_to=date_to,
         )
     return search_pastes(
         query=normalize_fts_query(q),
@@ -205,6 +215,8 @@ def api_search(
         secret_types=secret_type if secret_type else None,
         page=page,
         per_page=per_page,
+        date_from=date_from,
+        date_to=date_to,
     )
 
 
@@ -217,6 +229,8 @@ def api_pastes_export(
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     include_content: str = Query("false", description="Include full paste content ('true' or 'false')"),
+    date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
+    date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
     import json as jsonlib
 
@@ -227,7 +241,8 @@ def api_pastes_export(
 
     rows = list(export_pastes(query=query, source=source, content_type=content_type,
                               has_secrets=has_sec, secret_types=secret_types,
-                              include_content=inc_content))
+                              include_content=inc_content,
+                              date_from=date_from, date_to=date_to))
 
     if format == "json":
         def json_stream():

@@ -10,6 +10,8 @@ export interface FilterState {
   hasSecrets?: boolean
   page?: number
   groupBy?: string
+  dateFrom?: string
+  dateTo?: string
 }
 
 interface SecretTypeCount { type: string; count: number }
@@ -47,6 +49,8 @@ function queryString(state: FilterState): string {
   if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
   if (state.hasSecrets) qp.set('has_secrets', 'true')
   if (state.groupBy) qp.set('group_by', state.groupBy)
+  if (state.dateFrom) qp.set('date_from', state.dateFrom)
+  if (state.dateTo) qp.set('date_to', state.dateTo)
   return qp.toString()
 }
 
