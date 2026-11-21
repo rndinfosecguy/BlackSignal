@@ -6,6 +6,15 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.10.1] — 2026-11-21
+
+### Fixed
+- Large paste content in detail view is capped at 2,000 lines or 200KB to prevent
+  browser freeze. A warning banner explains the truncation. Full file still
+  available via the Download button.
+
+---
+
 ## [1.10.0] — 2026-11-21
 
 ### Added

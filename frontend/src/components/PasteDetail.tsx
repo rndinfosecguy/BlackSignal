@@ -33,6 +33,8 @@ const TYPE_LANG_MAP: Record<string, string> = {
 }
 
 const SCAN_LIMIT = 200000  // must match backend/detector.py scan_content() default
+const RENDER_LINE_LIMIT = 2000    // cap rendered lines to prevent browser freeze
+const RENDER_CHAR_LIMIT = 200000  // cap rendered chars to prevent browser freeze (matches backend scan limit)
 
 interface Secret { type: string; line: number; match: string }
 interface PasteDetailData {
@@ -100,12 +102,14 @@ export default function PasteDetail({ id, onClose }: Props) {
   const highlighted = useMemo(() => {
     if (!paste || !contentVisible) return ''
     const lang = TYPE_LANG_MAP[paste.content_type] || 'plaintext'
+    const txt = paste.content || ''
+    const isLong = txt.length > RENDER_CHAR_LIMIT
+    const input = isLong ? txt.slice(0, RENDER_CHAR_LIMIT) : txt
     try {
-      const txt = paste.content || ''
-      return hljs.highlight(txt, { language: lang }).value
+      return hljs.highlight(input, { language: lang }).value
     } catch {
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      return esc(paste.content || '')
+      return esc(input)
     }
   }, [paste, contentVisible])
 
@@ -114,7 +118,12 @@ export default function PasteDetail({ id, onClose }: Props) {
     [highlighted],
   )
 
-  
+  const isTruncated = useMemo(() => {
+    if (!paste) return false
+    const lineCount = paste.content?.split('\n')?.length || 0
+    const charCount = paste.content?.length || 0
+    return lineCount > RENDER_LINE_LIMIT || charCount > RENDER_CHAR_LIMIT
+  }, [paste])
 
   // Set of line numbers that have detected secrets (for inline highlighting).
   const secretLines = useMemo(() => {
@@ -134,7 +143,7 @@ export default function PasteDetail({ id, onClose }: Props) {
             <span className="text-[10px] text-[#444444]">{formatSize(paste?.size || 0)}</span>
             {paste?.content && paste.content.length > SCAN_LIMIT && !paste.fully_scanned && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ffd700]/10 text-[#ffd700]/80 whitespace-nowrap"
-                title="Only first 200K chars were scanned. Line numbers and detected secrets beyond this limit may be incorrect.">
+                title="Only first defined chars were scanned. Line numbers and detected secrets beyond this limit may be incorrect.">
                 partial scan
               </span>
             )}
@@ -186,6 +195,12 @@ export default function PasteDetail({ id, onClose }: Props) {
             </div>
           ) : paste && contentVisible ? (
             <div className="flex-1 min-w-0">
+                {isTruncated && (
+                  <div className="text-xs text-[#ffd700]/80 px-3 py-2 mb-2 bg-[#131313] rounded-md">
+                    File is large - only first 2,000 lines or 200KB are shown.
+                    Use the Download button to view the full content.
+                  </div>
+                )}
                 {highlightedLines.map((lineHtml, i) => (
                   <div key={i} className="flex items-start">
                     <code
