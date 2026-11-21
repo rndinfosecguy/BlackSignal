@@ -92,7 +92,7 @@ BlackSignal/
 ├── Dockerfile           # Multi-stage build (node → python)
 ├── setup.sh             # One-command Docker + Compose installer
 ├── VERSION              # Semantic version number
-├── CHANGELOG.md          # Version history
+├── CHANGELOG.md         # Version history
 └── docker-compose.yml
 ```
 
