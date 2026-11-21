@@ -6,6 +6,14 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.9.2] — 2026-11-21
+
+### Added
+- Docker log rotation — `max-size: 10m` with 3 retained files keeps container logs
+  bounded at ~30MB regardless of uptime
+
+---
+
 ## [1.9.1] — 2026-11-21
 
 ### Changed

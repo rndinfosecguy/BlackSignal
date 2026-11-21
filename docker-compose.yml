@@ -16,3 +16,8 @@ services:
       - SEARCH_TERMS_FILE=/app/configs/searchterms.txt
       - INDEX_WORKERS=4
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
