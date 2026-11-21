@@ -84,6 +84,12 @@ def _process_single(f, scan_limit=None):
     try:
         content_type = detect_content_type(f["path"], content)
         has_passwords, has_secrets, findings = scan_content(content, scan_limit=scan_limit)
+        # Determine if the file was fully scanned
+        if scan_limit == 0:
+            fully_scanned = 1  # comprehensive — full content scanned
+        else:
+            effective_limit = 200000 if scan_limit is None else scan_limit
+            fully_scanned = 1 if len(content) <= effective_limit else 0
         return {
             "id": f["id"],
             "filename": f["filename"],
@@ -95,6 +101,7 @@ def _process_single(f, scan_limit=None):
             "has_secrets": 1 if has_secrets else 0,
             "secrets_detail": findings,
             "modified_at": f["modified_at"],
+            "fully_scanned": fully_scanned,
         }
     except Exception as e:
         return {"id": f["id"], "error": str(e)}
@@ -211,6 +218,7 @@ def index_all_pastes(scan_limit=None, incremental=False):
                         has_secrets=result["has_secrets"],
                         secrets_detail=result["secrets_detail"],
                         modified_at=result["modified_at"],
+                        fully_scanned=result.get("fully_scanned", 0),
                         commit=False,
                     )
                     indexed_count += 1
@@ -252,6 +260,7 @@ def index_all_pastes(scan_limit=None, incremental=False):
                 try:
                     content_type = detect_content_type(f["path"], content)
                     has_passwords, has_secrets, findings = scan_content(content, scan_limit=scan_limit)
+                    fully_scanned = 1 if scan_limit == 0 or len(content) <= (200000 if scan_limit is None else scan_limit) else 0
                     upsert_paste(
                         paste_id=f["id"],
                         filename=f["filename"],
@@ -263,6 +272,7 @@ def index_all_pastes(scan_limit=None, incremental=False):
                         has_secrets=1 if has_secrets else 0,
                         secrets_detail=findings,
                         modified_at=f["modified_at"],
+                        fully_scanned=fully_scanned,
                         commit=False,
                     )
                     indexed_count += 1

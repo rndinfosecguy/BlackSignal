@@ -39,6 +39,7 @@ interface PasteDetailData {
   id: string; filename: string; source: string; content: string
   content_type: string; size: number; has_passwords: boolean
   has_secrets: boolean; secrets_detail: Secret[] | null; first_seen: string
+  fully_scanned: boolean
 }
 interface Props { id: string; onClose: () => void }
 
@@ -131,7 +132,7 @@ export default function PasteDetail({ id, onClose }: Props) {
             <span className="text-xs text-[#666666]">{paste?.content_type}</span>
             <span className="text-xs text-[#555555]" style={{ fontFamily: 'var(--font-mono)' }}>{paste?.filename}</span>
             <span className="text-[10px] text-[#444444]">{formatSize(paste?.size || 0)}</span>
-            {paste?.content && paste.content.length > SCAN_LIMIT && (
+            {paste?.content && paste.content.length > SCAN_LIMIT && !paste.fully_scanned && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ffd700]/10 text-[#ffd700]/80 whitespace-nowrap"
                 title="Only first 200K chars were scanned. Line numbers and detected secrets beyond this limit may be incorrect.">
                 partial scan

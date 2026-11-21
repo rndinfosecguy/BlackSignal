@@ -6,6 +6,16 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.10.0] — 2026-11-21
+
+### Added
+- **`fully_scanned` flag** — new DB column tracks whether a paste was completely scanned
+  or only partially (first 200K chars). Comprehensive reindex sets `fully_scanned=1` for
+  all files. The "partial scan" label in the detail view respects this flag — it only
+  shows for files > 200K that were not fully scanned.
+
+---
+
 ## [1.9.2] — 2026-11-21
 
 ### Added

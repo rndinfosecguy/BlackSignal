@@ -72,7 +72,8 @@ def init_db():
             secret_types  TEXT NOT NULL DEFAULT '',
             snippet      TEXT NOT NULL DEFAULT '',
             first_seen  TEXT DEFAULT (datetime('now')),
-            modified_at TEXT
+            modified_at TEXT,
+            fully_scanned INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE VIRTUAL TABLE IF NOT EXISTS pastes_fts USING fts5(
@@ -110,11 +111,17 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    try:
+        conn.execute("ALTER TABLE pastes ADD COLUMN fully_scanned INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
 
 
 def upsert_paste(paste_id, filename, source, content, content_type, size,
-                 has_passwords, has_secrets, secrets_detail, modified_at, commit=True):
+                 has_passwords, has_secrets, secrets_detail, modified_at, fully_scanned=0, commit=True):
     conn = get_conn()
 
     secret_types = ''
@@ -124,8 +131,8 @@ def upsert_paste(paste_id, filename, source, content, content_type, size,
 
     conn.execute("""
         INSERT INTO pastes (id, filename, source, content, content_type, size,
-                            has_passwords, has_secrets, secrets_detail, secret_types, snippet, modified_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            has_passwords, has_secrets, secrets_detail, secret_types, snippet, modified_at, fully_scanned)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             content=excluded.content,
             content_type=excluded.content_type,
@@ -135,10 +142,11 @@ def upsert_paste(paste_id, filename, source, content, content_type, size,
             secrets_detail=excluded.secrets_detail,
             secret_types=excluded.secret_types,
             snippet=excluded.snippet,
-            modified_at=excluded.modified_at
+            modified_at=excluded.modified_at,
+            fully_scanned=excluded.fully_scanned
     """, (paste_id, filename, source, content, content_type, size,
           has_passwords, has_secrets, json.dumps(secrets_detail) if secrets_detail else None,
-          secret_types, content[:200], modified_at))
+          secret_types, content[:200], modified_at, fully_scanned))
 
     fts_content = content[:50000]
     existing = conn.execute("SELECT id FROM pastes_fts WHERE id = ?", (paste_id,)).fetchone()
