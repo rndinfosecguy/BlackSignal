@@ -396,12 +396,17 @@ def get_stats_filtered(conditions, params):
 
 
 def clear_all_data():
-    """Delete all indexed pastes and FTS entries — used for purge reindex."""
+    """Delete all indexed pastes and FTS entries — used for purge reindex.
+    Uses DROP TABLE instead of DELETE FROM for fast execution on large databases."""
+
     conn = get_conn()
-    init_db()
-    conn.execute("DELETE FROM pastes")
-    conn.execute("DELETE FROM pastes_fts")
+    conn.execute("PRAGMA synchronous=OFF")
+    conn.execute("DROP TABLE IF EXISTS pastes_fts")
+    conn.execute("DROP TABLE IF EXISTS pastes")
     conn.commit()
+    conn.execute("PRAGMA synchronous=NORMAL")
+    # Re-create the tables and indexes
+    init_db()
 
 
 def get_indexed_ids():

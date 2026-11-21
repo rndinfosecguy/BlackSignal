@@ -180,8 +180,10 @@ def index_all_pastes(scan_limit=None, incremental=False):
 
             for f in files:
                 prog += 1
-                if prog % LOG_INTERVAL == 0:
+                # Update progress for API ~10x more often than log messages
+                if prog % max(1, LOG_INTERVAL // 10) == 0:
                     _index_progress.update(current=prog, phase="indexing")
+                if prog % LOG_INTERVAL == 0:
                     logger.info("Progress: %d/%d (%.0f%%), %d new indexed",
                                 prog, total_files, 100.0 * prog / total_files,
                                 indexed_count)
@@ -226,8 +228,10 @@ def index_all_pastes(scan_limit=None, incremental=False):
             # ---- synchronous fallback (same logic as original) ----------------
             skipped_count = 0
             for idx, f in enumerate(files, 1):
-                if idx % LOG_INTERVAL == 0:
+                # Update progress for API ~10x more often than log messages
+                if idx % max(1, LOG_INTERVAL // 10) == 0:
                     _index_progress.update(current=idx, phase="indexing")
+                if idx % LOG_INTERVAL == 0:
                     logger.info("Progress: %d/%d (%.0f%%)",
                                 idx, total_files, 100.0 * idx / total_files)
 

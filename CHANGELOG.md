@@ -6,6 +6,19 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.9.1] — 2026-11-21
+
+### Changed
+- Progress updates fire ~10x more frequently for the `/api/index-status` endpoint,
+  so the frontend progress bar updates evenly during long index runs instead of
+  stalling between log intervals
+
+### Fixed
+- Purge uses `DROP TABLE` instead of `DELETE FROM` — reduces clear time from
+  30–60s to <50ms on a large database
+
+---
+
 ## [1.9.0] — 2026-11-21
 
 ### Added
