@@ -318,9 +318,12 @@ def index_all_pastes(scan_limit=None, incremental=False):
 
 
 scheduler = AsyncIOScheduler()
+_REINDEX_INTERVAL = 300  # default, overridden by start_scheduler
 
 
 def start_scheduler(interval_seconds=300):
+    global _REINDEX_INTERVAL
+    _REINDEX_INTERVAL = interval_seconds
     scheduler.add_job(
         index_all_pastes,
         "interval",
@@ -331,3 +334,37 @@ def start_scheduler(interval_seconds=300):
     )
     scheduler.start()
     logger.info("Scheduler started: re-index every %d seconds", interval_seconds)
+
+
+def get_scheduler_info():
+    """Return scheduler status and next run time."""
+    next_run = None
+    job = scheduler.get_job("reindex")
+    if job and job.next_run_time:
+        next_run = job.next_run_time.isoformat()
+    return {
+        "interval_seconds": _REINDEX_INTERVAL,
+        "next_run": next_run,
+        "running": scheduler.running,
+    }
+
+
+def reschedule_interval(interval_seconds: int) -> None:
+    """Change the auto-index interval. Minimum 1 hour (3600 seconds)."""
+    global _REINDEX_INTERVAL
+    if interval_seconds < 3600:
+        raise ValueError("Interval must be at least 1 hour (3600 seconds)")
+    _REINDEX_INTERVAL = interval_seconds
+    job = scheduler.get_job("reindex")
+    if job:
+        scheduler.reschedule_job("reindex", trigger="interval", seconds=interval_seconds)
+    else:
+        scheduler.add_job(
+            index_all_pastes,
+            "interval",
+            seconds=interval_seconds,
+            id="reindex",
+            replace_existing=True,
+            kwargs={"incremental": True},
+        )
+    logger.info("Reindex interval changed to %d seconds", interval_seconds)

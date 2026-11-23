@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect } from 'react'
-import { sourceColor } from './lib/utils'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { sourceColor, renderMarkdown } from './lib/utils'
 import SearchBar from './components/SearchBar'
 import FilterChips from './components/FilterChips'
 import PasteCard from './components/PasteCard'
 import PasteDetail from './components/PasteDetail'
 import StatsDashboard from './components/StatsDashboard'
 import Pagination from './components/Pagination'
+import ConfigTab from './components/ConfigTab'
 import { usePastes } from './hooks/usePastes'
 import type { FilterState } from './hooks/usePastes'
 
@@ -31,9 +32,16 @@ export default function App() {
 
   // Computed filter state flags (used before the dashboard section)
   const [currentTab, setCurrentTab] = useState('dashboard')
-  const [confirmReindex, setConfirmReindex] = useState<string | null>(null)
   const [reindexToast, setReindexToast] = useState<string | null>(null)
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false)
+  const [llmReportRunning, setLlmReportRunning] = useState(false)
+  const [llmReportProgress, setLlmReportProgress] = useState<{ current: number; total: number } | null>(null)
+  const [llmReportResult, setLlmReportResult] = useState<string | null>(null)
+  const [llmReportError, setLlmReportError] = useState<string | null>(null)
+  const [showLlmReport, setShowLlmReport] = useState(false)
+  const [llmConfigured, setLlmConfigured] = useState(false)
+  const [confirmLlmCancel, setConfirmLlmCancel] = useState(false)
+  const reportPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Watch for new reindex results — show a toast until dismissed
   useEffect(() => {
@@ -45,6 +53,14 @@ export default function App() {
     if (parts.length === 0) parts.push('no changes')
     setReindexToast(`Reindex complete: ${parts.join(', ')}`)
   }, [lastReindexResult])
+
+  // Fetch LLM config status for the report button
+  useEffect(() => {
+    fetch('/api/llm/config')
+      .then(r => r.json())
+      .then(d => setLlmConfigured(d.configured))
+      .catch(() => setLlmConfigured(false))
+  }, [])
 
   // Show loading overlay when filters take > 1 second
   useEffect(() => {
@@ -157,6 +173,104 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [applyAll])
 
+  const handleLlmReport = async () => {
+    if (llmReportRunning) return
+    // Re-check config in case the user updated it in the Config tab
+    try {
+      const cfgRes = await fetch('/api/llm/config')
+      const cfgData = await cfgRes.json()
+      if (!cfgData.configured) {
+        setLlmConfigured(false)
+        return
+      }
+      setLlmConfigured(true)
+    } catch {
+      setLlmConfigured(false)
+      return
+    }
+    setLlmReportResult(null)
+    setLlmReportError(null)
+    setLlmReportRunning(true)
+    setLlmReportProgress(null)
+    setShowLlmReport(true)
+
+    // Build the same query string as the export links
+    const params: string[] = []
+    if (query) params.push(`q=${encodeURIComponent(query)}`)
+    activeSources.forEach(s => params.push(`source=${encodeURIComponent(s)}`))
+    activeTypes.forEach(t => params.push(`content_type=${encodeURIComponent(t)}`))
+    activeSecretTypes.forEach(st => params.push(`secret_type=${encodeURIComponent(st)}`))
+    if (hasSecrets) params.push('has_secrets=true')
+    if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`)
+    if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`)
+
+    try {
+      const res = await fetch(`/api/llm/report${params.length > 0 ? '?' + params.join('&') : ''}`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+      if (data.status === 'done') {
+        setLlmReportResult(data.report)
+        setLlmReportRunning(false)
+        return
+      }
+      setLlmReportProgress({ current: 0, total: data.total })
+
+      // Poll for completion
+      const poll = setInterval(async () => {
+        try {
+          const pr = await fetch('/api/llm/report-status')
+          const pd = await pr.json()
+          if (pd.running) {
+            setLlmReportProgress({ current: pd.current || 0, total: pd.total || 0 })
+          } else {
+            clearInterval(poll)
+            setLlmReportRunning(false)
+            if (pd.final_report) {
+              setLlmReportResult(pd.final_report)
+            } else if (pd.error) {
+              setLlmReportError(pd.error)
+            } else {
+              setLlmReportError('Report generation failed')
+            }
+          }
+        } catch {
+          clearInterval(poll)
+          setLlmReportRunning(false)
+          setLlmReportError('Failed to poll report status')
+        }
+      }, 3000)
+      reportPollRef.current = poll
+    } catch (e: unknown) {
+      setLlmReportError(e instanceof Error ? e.message : 'Failed to start report')
+      setLlmReportRunning(false)
+    }
+  }
+
+  const handleCloseLlmReport = () => {
+    // If the report is still running without result, ask for confirmation
+    if (llmReportRunning && llmReportResult === null && llmReportError === null) {
+      setConfirmLlmCancel(true)
+      return
+    }
+    if (reportPollRef.current) {
+      clearInterval(reportPollRef.current)
+      reportPollRef.current = null
+    }
+    setShowLlmReport(false)
+    setLlmReportRunning(false)
+  }
+
+  const handleDownloadReport = () => {
+    if (!llmReportResult) return
+    // Download the ZIP bundle (report.md at root + per-paste analyses in pastes/)
+    const a = document.createElement('a')
+    a.href = '/api/llm/report-download'
+    a.download = 'blacksignal-llm-report.zip'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   const indexing = indexStatus.running
 
   const progressPct = indexStatus.total > 0
@@ -226,13 +340,17 @@ export default function App() {
               className={`text-sm px-4 py-2 ${currentTab === 'dashboard' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Dashboard
             </button>
-            <button onClick={() => { fetchStats({ q: query, sources: activeSources, types: activeTypes, secretTypes: activeSecretTypes.length > 0 ? activeSecretTypes : undefined, hasSecrets, dateFrom, dateTo }); setCurrentTab('pastes') }}
+            <button onClick={() => {
+                fetchStats({ q: query, sources: activeSources, types: activeTypes, secretTypes: activeSecretTypes.length > 0 ? activeSecretTypes : undefined, hasSecrets, dateFrom, dateTo })
+                fetch('/api/llm/config').then(r => r.json()).then(d => setLlmConfigured(d.configured)).catch(() => {})
+                setCurrentTab('pastes')
+              }}
               className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Pastes
             </button>
-            <button onClick={() => setCurrentTab('reindex')}
-              className={`text-sm px-4 py-2 ${currentTab === 'reindex' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
-              Reindex
+            <button onClick={() => setCurrentTab('config')}
+              className={`text-sm px-4 py-2 ${currentTab === 'config' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
+              Config
             </button>
           </div>
 
@@ -298,6 +416,12 @@ export default function App() {
                     className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888] transition-all cursor-pointer no-underline">
                     JSON
                   </a>
+                  <span className="text-[#333333] text-xs">|</span>
+                  <button onClick={handleLlmReport} disabled={llmReportRunning || !llmConfigured}
+                    className="text-xs px-3 py-1.5 rounded-md border border-[#ff004d]/40 text-[#ff004d] hover:bg-[#ff004d]/10 hover:border-[#ff004d] transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    title={!llmConfigured ? 'Set up data/openrouter.json with your OpenRouter API key to enable' : ''}>
+                    {llmReportRunning ? 'Generating...' : 'LLM Report'}
+                  </button>
                 </div>
               </div>
 
@@ -470,82 +594,7 @@ export default function App() {
             </div>
           )}
 
-          {confirmReindex && (
-            <div onClick={() => setConfirmReindex(null)}
-              className="fixed inset-0 z-40 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm p-4">
-              <div onClick={e => e.stopPropagation()}
-                className="bg-[#131313] border border-[#222222] rounded-xl w-full max-w-sm p-6 text-center">
-                {(() => {
-                  const mode = confirmReindex
-                  const accent = mode === 'purge' ? '#ff004d' : mode === 'comprehensive' ? '#ffd700' : '#00e5ff'
-                  const title = mode === 'purge' ? 'Purge all data?' : mode === 'comprehensive' ? 'Comprehensive reindex?' : 'Standard reindex?'
-                  const desc = mode === 'purge'
-                    ? 'All indexed data will be permanently deleted. A fresh reindex will start from scratch.'
-                    : mode === 'comprehensive'
-                      ? 'All large files will be re-scanned without size limits. This may take a long time.'
-                      : 'Only new paste files will be indexed. Already indexed files are skipped.'
-                  return (
-                    <>
-                    <div className="text-sm font-medium mb-3" style={{ color: accent }}>{title}</div>
-                    <div className="text-xs text-[#555555] mb-5">{desc}</div>
-                    <div className="flex items-center gap-3 justify-center">
-                      <button onClick={() => { setConfirmReindex(null); triggerReindex(mode) }}
-                        className="text-sm px-5 py-2 rounded-md transition-all cursor-pointer"
-                        style={{ border: `1px solid ${accent}`, color: accent, backgroundColor: 'transparent' }}>
-                        Yes, start reindex
-                      </button>
-                      <button onClick={() => setConfirmReindex(null)}
-                        className="text-xs px-4 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#666666] transition-all cursor-pointer">
-                        Cancel
-                      </button>
-                    </div>
-                    </>
-                  )
-                })()}
-              </div>
-            </div>
-          )}
-          {currentTab === 'reindex' && (
-            <div className="space-y-5">
-              <div className="bg-[#131313] border border-[#222222] rounded-lg p-5 cursor-pointer hover:bg-[#00e5ff]/5 transition-all"
-                onClick={() => setConfirmReindex('standard')}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-[#00e5ff]">Standard reindex</div>
-                    <div className="text-xs text-[#555555] mt-1">200K limit per file - quick, respects size limits</div>
-                  </div>
-                  <span className="text-[#00e5ff] text-lg">▶</span>
-                </div>
-              </div>
-
-              <details className="bg-[#131313] border border-[#222222] rounded-lg p-5 open:border-[#ffd700]">
-                <summary className="text-sm font-medium text-[#ffd700] cursor-pointer">Comprehensive reindex</summary>
-                <div className="mt-3 text-xs text-[#777777] leading-relaxed">
-                  Disables the file size limit and scans the full content of every paste.
-                  The additional detections depend on your data — pastes with many large files
-                  will benefit more. It can take significantly longer; for large datasets it
-                  could take hours.
-                </div>
-                <button onClick={() => setConfirmReindex('comprehensive')}
-                  className="w-full mt-3 text-sm px-4 py-2 rounded-md border border-[#ffd700] text-[#ffd700] hover:bg-[#ffd700]/5 transition-all cursor-pointer">
-                  Start comprehensive reindex
-                </button>
-              </details>
-
-              <details className="bg-[#131313] border border-[#222222] rounded-lg p-5">
-                <summary className="text-sm font-medium text-[#ff004d] cursor-pointer">Purge & reindex</summary>
-                <div className="mt-3 text-xs text-[#ff004d]/80 leading-relaxed">
-                  Permanently deletes all indexed data from the database and starts a
-                  fresh reindex from scratch. This cannot be undone. Only use this if
-                  you want to completely rebuild the index.
-                </div>
-                <button onClick={() => setConfirmReindex('purge')}
-                  className="w-full mt-3 text-sm px-4 py-2 rounded-md border border-[#ff004d] text-[#ff004d] hover:bg-[#ff004d]/5 transition-all cursor-pointer">
-                  Execute purge
-                </button>
-              </details>
-            </div>
-          )}
+          {currentTab === 'config' && <ConfigTab onReindex={triggerReindex} />}
           <footer className="mt-10 pt-5 border-t border-[#1a1a1a] flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 text-[12px] text-[#444444]">
               <span>BlackSignal &middot; Paste Intelligence System</span>
@@ -559,6 +608,100 @@ export default function App() {
       )}
 
       {detailId && <PasteDetail id={detailId} onClose={() => setDetailId(null)} />}
+
+      {/* LLM Report cancel confirmation */}
+      {confirmLlmCancel && (
+        <div onClick={() => setConfirmLlmCancel(false)}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm p-4">
+          <div onClick={e => e.stopPropagation()}
+            className="bg-[#131313] border border-[#222222] rounded-xl w-full max-w-sm p-6 text-center">
+            <div className="text-sm font-medium mb-3" style={{ color: '#ff004d' }}>Cancel report generation?</div>
+            <div className="text-xs text-[#555555] mb-5">
+              The LLM report is still generating. Closing will cancel the analysis and you will lose progress.
+            </div>
+            <div className="flex items-center gap-3 justify-center">
+              <button onClick={() => {
+                // Tell the backend to cancel
+                fetch('/api/llm/report-cancel', { method: 'POST' }).catch(() => {})
+                setConfirmLlmCancel(false)
+                if (reportPollRef.current) {
+                  clearInterval(reportPollRef.current)
+                  reportPollRef.current = null
+                }
+                setShowLlmReport(false)
+                setLlmReportRunning(false)
+              }}
+                className="text-sm px-5 py-2 rounded-md transition-all cursor-pointer"
+                style={{ border: '1px solid #ff004d', color: '#ff004d', backgroundColor: 'transparent' }}>
+                Yes, cancel
+              </button>
+              <button onClick={() => setConfirmLlmCancel(false)}
+                className="text-xs px-4 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#666666] transition-all cursor-pointer">
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LLM Report modal */}
+      {showLlmReport && (
+        <div onClick={handleCloseLlmReport}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
+          <div onClick={e => e.stopPropagation()}
+            className="bg-[#0d0d0d] border border-[#222222] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-[#222222]">
+              <div className="text-sm text-[#e8e8e8] font-medium">
+                {llmReportRunning ? 'Generating LLM Report...' : 'LLM Security Report'}
+              </div>
+              <div className="flex items-center gap-2.5">
+                {llmReportResult && (
+                  <button onClick={handleDownloadReport}
+                    className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#ff004d] hover:border-[#ff004d] transition-all cursor-pointer">
+                    Download Report
+                  </button>
+                )}
+                <button onClick={handleCloseLlmReport}
+                  className="text-[#666666] hover:text-[#ff004d] text-lg transition-all leading-none cursor-pointer">&times;</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              {llmReportRunning && (
+                <div className="py-8 text-center">
+                  <div className="inline-block w-8 h-8 rounded-full border-2 border-transparent border-t-[#ff004d] border-r-[#ff004d]/60 animate-spin mb-3" />
+                  <div className="text-sm text-[#555555] mb-2">Analyzing pastes with LLM...</div>
+                  {llmReportProgress && (
+                    <div className="text-xs text-[#444444]">
+                      {llmReportProgress.current} / {llmReportProgress.total} pastes analyzed
+                    </div>
+                  )}
+                  {llmReportProgress && llmReportProgress.total > 0 && (
+                    <div className="w-64 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden mt-3 mx-auto">
+                      <div className="h-full bg-[#ff004d] rounded-full transition-all duration-500"
+                        style={{ width: `${Math.round(llmReportProgress.current / llmReportProgress.total * 100)}%` }} />
+                    </div>
+                  )}
+                </div>
+              )}
+              {llmReportError && !llmReportRunning && (
+                <div className="py-8 text-center">
+                  <div className="text-sm text-[#ff004d] mb-1">Report failed</div>
+                  <div className="text-xs text-[#555555]">{llmReportError}</div>
+                  <button onClick={handleCloseLlmReport}
+                    className="mt-4 text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:text-[#666666] transition-all cursor-pointer">
+                    Close
+                  </button>
+                </div>
+              )}
+              {llmReportResult && (
+                <div className="py-4">
+                  <div className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: renderMarkdown(llmReportResult) }} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

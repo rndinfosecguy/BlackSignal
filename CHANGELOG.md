@@ -6,6 +6,45 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.13.0] — 2026-11-23
+
+### Added
+- **LLM per-paste analysis** — "Analyze with LLM" button in the paste detail view sends
+  the first 200 KB of a paste to OpenRouter (`meta-llama/llama-3.1-8b-instruct`) and renders
+  a structured markdown summary: technical/infrastructure findings, personal/PII findings,
+  and a risk assessment. The response can be downloaded as `.md`.
+- **LLM batch report** — "LLM Report" in the export row analyzes every paste matching the
+  current filters individually, then synthesizes an overall security report (executive
+  summary, most critical findings, overview by category, top sources of risk) plus a
+  deduplicated **Detailed Findings** table (source, paste ID, type, line, finding).
+  Reports run in a background thread with progress polling and can be cancelled.
+- **ZIP report download** — the finished report downloads as a bundle with `report.md` at
+  the root and one markdown analysis per paste under `pastes/`. Filenames are sanitized and
+  de-duplicated to prevent path traversal.
+- **Config tab** — new navigation tab combining database statistics (DB size, indexed
+  pastes, raw paste size/count), indexer statistics (interval, next run, last result),
+  reindex controls, and OpenRouter key management (masked preview, set, change, remove).
+- **Editable auto-index interval** — change the periodic reindex interval at runtime
+  (minimum 1 hour) without editing `docker-compose.yml`.
+- **OpenRouter configuration** — `data/openrouter.json` (`{ "openrouter_key": "..." }`) or
+  the Config tab. The key is stored server-side and never exposed to the browser; only a
+  masked preview is shown.
+- **DB / scheduler API endpoints** — `GET /api/db-stats`, `GET|POST /api/indexer-info`,
+  and the `/api/llm/*` endpoints (config, key, summarize, report, report-status,
+  report-cancel, report-download).
+- **Markdown table and horizontal-rule rendering** — the frontend markdown renderer now
+  renders `|` tables and `---` rules, used by the LLM views.
+
+### Changed
+- The standalone **Reindex tab was merged into the Config tab** — same standard /
+  comprehensive / purge actions and confirmation dialogs, now alongside the other
+  operational settings.
+- LLM-related buttons and accents use the app's red theme instead of cyan.
+- LLM features degrade gracefully: without a configured key the buttons are visible but
+  disabled, with a tooltip explaining how to enable them.
+
+---
+
 ## [1.12.0] — 2026-11-21
 
 ### Added

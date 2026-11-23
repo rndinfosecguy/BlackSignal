@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Python](https://img.shields.io/badge/Python-3.12-blueviolet)
 ![Docker](https://img.shields.io/badge/Docker-ready-0db7ed)
-![Version](https://img.shields.io/badge/version-1.12.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.13.0-brightgreen)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
@@ -33,8 +33,10 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 - **Syntax highlighting** — highlight.js for different coding languages
 - **Dashboard** — overview tab showing technical and personal detection rates, source/type distributions, and per-type breakdowns
 - **Comprehensive reindex** — optional full-content scan mode (bypasses size limits) for deep inspection of large files
-- **Periodic re-indexing** — automatic daily scan for new/changed pastes
-- **Export findings** — download search results as CSV or JSON with the current filter state
+- **Periodic re-indexing** — automatic daily scan for new/changed pastes (interval configurable in the Config tab)
+- **Export findings** - download search results as CSV or JSON with the current filter state
+- **LLM analysis per paste (optional)** —  produces a structured markdown summary with technical and personal findings plus a risk assessment. Requires an OpenRouter API key (see [LLM Integration](#llm-integration-optional)).
+- **LLM batch report (optional)** — analyzes every paste matching the current filters individually, then creates an overall security report..
 - **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
 
 ## Tech Stack
@@ -45,6 +47,7 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 | Database | SQLite 3 + FTS5 (full-text) |
 | Frontend | React, Vite, Tailwind CSS v4, highlight.js |
 | Reverse proxy / auth | nginx + htpasswd |
+| LLM (optional) | OpenRouter API (`meta-llama/llama-3.1-8b-instruct`) |
 | Runtime | Docker / docker-compose |
 
 ## Architecture
@@ -76,17 +79,18 @@ BlackSignal/
 │   ├── database.py      # SQLite/FTS5 schema, queries, indexed access
 │   ├── indexer.py       # Walk raw_pastes/, detect content types
 │   ├── detector.py      # Sensitive-data regex/keyword patterns
+│   ├── llm.py           # OpenRouter integration (per-paste analysis + report aggregation)
 │   ├── scheduler.py     # Periodic re-indexing (APScheduler), threaded pipeline
 │   └── searchterms.txt  # Custom search terms — add terms here & reindex to apply
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx          # Main UI (filter state, indexing overlay)
+│   │   ├── App.tsx          # Main UI (filter state, indexing overlay, LLM report)
 │   │   ├── hooks/           # usePastes — data fetching, index-status polling
-│   │   ├── components/      # PasteCard, PasteDetail, FilterChips, SearchBar, …
+│   │   ├── components/      # PasteCard, PasteDetail, FilterChips, ConfigTab, …
 │   │   └── styles/          # Tailwind v4 + dark hacker theme
 │   └── public/bs_logo.png
 ├── raw_pastes/          # Paste data (one subdir per source, gitignored contents)
-├── data/                # Runtime DB + credentials (gitignored)
+├── data/                # Runtime DB, credentials, openrouter.json (gitignored)
 ├── nginx/default.conf   # Reverse proxy + htpasswd + gzip
 ├── docker-entrypoint.sh # Generates auth creds, starts nginx + backend
 ├── Dockerfile           # Multi-stage build (node → python)
@@ -147,6 +151,31 @@ environment:
 
 Visit `http://localhost:9090`
 
+## LLM Integration (optional)
+
+The LLM features are **disabled by default** and entirely opt-in — without an API key the app behaves exactly as before. When enabled, paste content (first 200 KB per paste) is sent to [OpenRouter](https://openrouter.ai) for analysis. Obviously you need a balance on your [OpenRouter](https://openrouter.ai) account.
+
+### Enable
+
+1. Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys).
+2. Either add it in the **Config** tab of the web UI, or create `data/openrouter.json`:
+
+```json
+{
+  "openrouter_key": "sk-or-v1-..."
+}
+```
+
+### Usage
+
+- **Per paste** — open a paste and click **Analyze with LLM** for a structured summary (technical findings, personal findings, risk assessment).
+- **Batch** — apply filters, then click **LLM Report** next to the export buttons. Every visible paste is analyzed individually, results are synthesized into an overall report.
+
+### Limits
+
+- Only the first **200 KB** of each paste is analyzed.
+- Batch reports cover at most **500** pastes per run.
+
 ## API Documentation
 
 | Method | Endpoint | Description |
@@ -162,9 +191,21 @@ Visit `http://localhost:9090`
 | GET | `/api/types` | Content-type distribution. Optional: `?source=` |
 | GET | `/api/secret-types` | Detected secret categories with counts. Optional: `?source=`, `?content_type=` |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
+| GET | `/api/indexer-info` | Scheduler info: `{ interval_seconds, next_run, running }` |
+| POST | `/api/indexer-info` | Update auto-index interval. Body: `{ "interval_seconds": N }` (minimum 3600) |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
-| GET | `/api/version` | App version: `{ version: "1.12.0" }` |
+| GET | `/api/db-stats` | Database stats: `{ db_size_bytes, paste_count, raw_pastes_size_bytes, raw_pastes_count }` |
+| GET | `/api/version` | App version: `{ version: "1.13.0" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
+| GET | `/api/llm/config` | Whether LLM features are enabled: `{ configured: true\|false }` |
+| GET | `/api/llm/key` | Masked key preview: `{ key_preview: "sk-or-v1-...abcd" }` (empty if unset) |
+| POST | `/api/llm/key` | Set the OpenRouter key. Body: `{ "key": "sk-or-v1-..." }` |
+| DELETE | `/api/llm/key` | Remove the stored OpenRouter key |
+| POST | `/api/llm/summarize/{id}` | Analyze one paste. Returns `{ summary: "<markdown>" }` |
+| POST | `/api/llm/report` | Start a batch report for the filtered pastes. Same filter params as `/api/pastes/export` |
+| GET | `/api/llm/report-status` | Report progress: `{ running, current, total, phase, final_report, error }` |
+| POST | `/api/llm/report-cancel` | Cancel an in-progress report |
+| GET | `/api/llm/report-download` | Download the completed report as a ZIP (`report.md` + `pastes/*.md`) |
 
 Example - export CSV with source and date range:
 

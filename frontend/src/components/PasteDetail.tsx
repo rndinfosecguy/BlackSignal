@@ -10,9 +10,9 @@ import bash from 'highlight.js/lib/languages/bash'
 import php from 'highlight.js/lib/languages/php'
 import java from 'highlight.js/lib/languages/java'
 import c from 'highlight.js/lib/languages/c'
-import markdown from 'highlight.js/lib/languages/markdown'
+import markdown_h from 'highlight.js/lib/languages/markdown'
 import { fetchPasteDetail } from '../hooks/usePastes'
-import { formatSize, splitHighlighted } from '../lib/utils'
+import { formatSize, splitHighlighted, renderMarkdown } from '../lib/utils'
 
 hljs.registerLanguage('json', json)
 hljs.registerLanguage('xml', xml)
@@ -24,7 +24,7 @@ hljs.registerLanguage('bash', bash)
 hljs.registerLanguage('php', php)
 hljs.registerLanguage('java', java)
 hljs.registerLanguage('c', c)
-hljs.registerLanguage('markdown', markdown)
+hljs.registerLanguage('markdown', markdown_h)
 
 const TYPE_LANG_MAP: Record<string, string> = {
   json: 'json', html: 'xml', xml: 'xml', python: 'python',
@@ -53,14 +53,28 @@ export default function PasteDetail({ id, onClose }: Props) {
   const [contentVisible, setContentVisible] = useState(true)
   const fetchReqId = useRef(0)
 
+  // LLM state
+  const [llmConfigured, setLlmConfigured] = useState(false)
+  const [llmLoading, setLlmLoading] = useState(false)
+  const [llmResponse, setLlmResponse] = useState<string | null>(null)
+  const [llmError, setLlmError] = useState<string | null>(null)
+
   useEffect(() => {
     const reqId = ++fetchReqId.current
     setLoading(true)
     setFetchError(false)
+    setLlmResponse(null)
+    setLlmError(null)
     document.body.style.overflow = 'hidden'
-    fetchPasteDetail(id).then(p => {
-      if (fetchReqId.current !== reqId) return  // stale response
+
+    // Fetch paste detail and LLM config in parallel
+    Promise.all([
+      fetchPasteDetail(id),
+      fetch('/api/llm/config').then(r => r.json()).then(d => d.configured).catch(() => false),
+    ]).then(([p, configured]) => {
+      if (fetchReqId.current !== reqId) return
       setPaste(p)
+      setLlmConfigured(configured)
       setLoading(false)
       if (!p) setFetchError(true)
       else if (p.secrets_detail && p.secrets_detail.length > 0) setContentVisible(false)
@@ -93,6 +107,38 @@ export default function PasteDetail({ id, onClose }: Props) {
     const a = document.createElement('a')
     a.href = url
     a.download = `${paste.source}_${paste.filename || paste.id}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleLlmSummarize = async () => {
+    if (llmLoading || !paste) return
+    setLlmLoading(true)
+    setLlmError(null)
+    setLlmResponse(null)
+    try {
+      const res = await fetch(`/api/llm/summarize/${encodeURIComponent(id)}`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || `HTTP ${res.status}`)
+      }
+      setLlmResponse(data.summary)
+    } catch (e: unknown) {
+      setLlmError(e instanceof Error ? e.message : 'Summarization failed')
+    } finally {
+      setLlmLoading(false)
+    }
+  }
+
+  const handleDownloadSummary = () => {
+    if (!llmResponse) return
+    const blob = new Blob([llmResponse], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${paste?.source ?? 'paste'}_${paste?.filename || paste?.id || id}_summary.md`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -132,16 +178,21 @@ export default function PasteDetail({ id, onClose }: Props) {
     return s
   }, [paste])
 
+  const llmResponseHtml = useMemo(
+    () => llmResponse ? renderMarkdown(llmResponse) : null,
+    [llmResponse],
+  )
+
   return (
     <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
       <div onClick={e => e.stopPropagation()} className="bg-[#0d0d0d] border border-[#222222] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-[#222222]">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-[#e8e8e8] font-medium">{paste?.source || 'Paste Detail'}</span>
-            <span className="text-xs text-[#666666]">{paste?.content_type}</span>
-            <span className="text-xs text-[#555555]" style={{ fontFamily: 'var(--font-mono)' }}>{paste?.filename}</span>
-            <span className="text-[10px] text-[#444444]">Indexed: {paste?.first_seen?.slice(0, 10)}</span>
-            <span className="text-[10px] text-[#444444]">{formatSize(paste?.size || 0)}</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-[#e8e8e8] font-medium whitespace-nowrap">{paste?.source || 'Paste Detail'}</span>
+            <span className="text-xs text-[#666666] whitespace-nowrap">{paste?.content_type}</span>
+            <span className="text-xs text-[#555555] truncate max-w-[200px]" style={{ fontFamily: 'var(--font-mono)' }} title={paste?.filename}>{paste?.filename}</span>
+            <span className="text-[10px] text-[#444444] whitespace-nowrap">Indexed: {paste?.first_seen?.slice(0, 10)}</span>
+            <span className="text-[10px] text-[#444444] whitespace-nowrap">{formatSize(paste?.size || 0)}</span>
             {paste?.content && paste.content.length > SCAN_LIMIT && !paste.fully_scanned && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ffd700]/10 text-[#ffd700]/80 whitespace-nowrap"
                 title="Only first defined chars were scanned. Line numbers and detected secrets beyond this limit may be incorrect.">
@@ -150,7 +201,17 @@ export default function PasteDetail({ id, onClose }: Props) {
             )}
           </div>
           <div className="flex items-center gap-2.5">
-            
+            {/* LLM Summarize button */}
+            <button onClick={handleLlmSummarize} disabled={llmLoading || !llmConfigured}
+              className="text-xs px-3 py-1.5 rounded-md border border-[#ff004d]/40 text-[#ff004d] hover:bg-[#ff004d]/10 hover:border-[#ff004d] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              title={!llmConfigured ? 'Set up data/openrouter.json with your OpenRouter API key to enable' : 'Analyze this paste with LLM'}>
+              {llmLoading ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-full border-2 border-transparent border-t-[#ff004d] border-r-[#ff004d]/60 animate-spin" />
+                  Analyzing...
+                </span>
+              ) : llmResponse ? 'Analyze Again' : 'Analyze with LLM'}
+            </button>
             <button onClick={handleCopy}
               className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all">
               {copied ? 'Copied' : 'Copy'}
@@ -183,7 +244,7 @@ export default function PasteDetail({ id, onClose }: Props) {
             </div>
           </div>
         )}
-        
+
         <div className="flex-1 overflow-y-auto overflow-x-scroll px-4 pb-4">
           {loading ? (
             <div className="flex items-center justify-center h-32 text-[#555555]">Loading...</div>
@@ -194,8 +255,41 @@ export default function PasteDetail({ id, onClose }: Props) {
                 <div className="text-[#555555] text-xs">{id.slice(0, 24)}...</div>
               </div>
             </div>
-          ) : paste && contentVisible ? (
-            <div className="flex-1 min-w-0">
+          ) : (
+            <>
+            {llmLoading && (
+              <div className="bg-[#0a0a0a] border border-[#222222] rounded-lg p-4 mb-3">
+                <div className="flex items-center gap-3 text-xs text-[#555555]">
+                  <span className="inline-block w-4 h-4 rounded-full border-2 border-transparent border-t-[#00e5ff] border-r-[#00e5ff]/60 animate-spin" />
+                  Contacting LLM for analysis...
+                </div>
+              </div>
+            )}
+            {llmError && !llmLoading && (
+              <div className="bg-[#0a0a0a] border border-[#222222] rounded-lg p-3 mb-3">
+                <div className="text-xs text-[#ff004d]">LLM Error: {llmError}</div>
+              </div>
+            )}
+            {llmResponseHtml && (
+              <div className="bg-[#0a0a0a] border border-[#222222] rounded-lg p-4 mb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs text-[#ff004d] font-medium">LLM Analysis</div>
+                  <button onClick={handleDownloadSummary}
+                    className="text-[11px] px-2.5 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#ff004d] hover:border-[#ff004d] transition-all cursor-pointer">
+                    Download Summary
+                  </button>
+                </div>
+                {paste && paste.size > SCAN_LIMIT && (
+                  <div className="text-xs text-[#ffd700]/80 px-3 py-2 mb-3 bg-[#131313] rounded-md"
+                    style={{ borderLeft: '3px solid #ffd700' }}>
+                    Only the first 200 KB of content were analyzed by the LLM. The full paste may contain additional data beyond this limit.
+                  </div>
+                )}
+                <div className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: llmResponseHtml }} />
+              </div>
+            )}
+            {paste && contentVisible && (
+              <div className="flex-1 min-w-0">
                 {isTruncated && (
                   <div className="text-xs text-[#ffd700]/80 px-3 py-2 mb-2 bg-[#131313] rounded-md">
                     File is large - only first 2,000 lines or 200KB are shown.
@@ -225,7 +319,9 @@ export default function PasteDetail({ id, onClose }: Props) {
                   </div>
                 ))}
               </div>
-          ) : paste ? null : null}
+            )}
+            </>
+          )}
         </div>
       </div>
     </div>
