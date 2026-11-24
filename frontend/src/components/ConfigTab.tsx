@@ -222,13 +222,13 @@ export default function ConfigTab({ onReindex }: Props) {
                     step="0.5"
                     value={intervalValue}
                     onChange={e => setIntervalValue(e.target.value)}
-                    className="w-20 bg-[#0d0d0d] border border-[#222222] rounded-md px-2 py-1 text-xs text-[#e8e8e8] outline-none focus:border-[#00e5ff] transition-colors"
+                    className="w-20 bg-[#0d0d0d] border border-[#222222] rounded-md px-2 py-1 text-xs text-[#e8e8e8] outline-none focus:border-[#ff004d] transition-colors"
                   />
                   <span className="text-xs text-[#555555]">hours</span>
                 </div>
                 <div className="flex items-center gap-1.5 mt-1">
                   <button onClick={handleSaveInterval}
-                    className="text-[11px] px-2 py-1 rounded-md border border-[#00e5ff]/40 text-[#00e5ff] hover:bg-[#00e5ff]/10 transition-all cursor-pointer">
+                    className="text-[11px] px-2 py-1 rounded-md border border-[#ff004d]/40 text-[#ff004d] hover:bg-[#ff004d]/10 transition-all cursor-pointer">
                     Save
                   </button>
                   <button onClick={handleCancelInterval}
@@ -244,7 +244,7 @@ export default function ConfigTab({ onReindex }: Props) {
                   {indexerInfo ? fmtInterval(indexerInfo.interval_seconds) : '...'}
                 </span>
                 <button onClick={handleEditInterval}
-                  className="text-[10px] px-1.5 py-0.5 rounded border border-[#222222] text-[#555555] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all cursor-pointer">
+                  className="text-[10px] px-1.5 py-0.5 rounded border border-[#222222] text-[#555555] hover:text-[#ff004d] hover:border-[#ff004d] transition-all cursor-pointer">
                   Edit
                 </button>
               </div>

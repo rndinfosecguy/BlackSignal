@@ -6,6 +6,19 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.13.2] — 2026-11-24
+
+### Changed
+- **Consistent red accent across the UI.** The signature red (`#ff004d`) now also drives
+  the navigation tabs (Dashboard / Pastes / Config), the list grouping options
+  (None / Source / Type), the search bar focus and button hover, the loading overlay
+  spinner, the active pagination page, filter chips and the "+ Add filter" overlay, and
+  the auto-index interval edit/save controls in the Config tab.
+- Cyan is retained only where it carries meaning: the technical-vs-personal detection
+  encoding (cyan = technical, yellow = personal) in the dashboard and secret-type chips.
+
+---
+
 ## [1.13.1] — 2026-11-24
 
 ### Fixed

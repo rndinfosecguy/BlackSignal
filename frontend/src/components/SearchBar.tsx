@@ -27,7 +27,7 @@ export default function SearchBar({ onSearch, loading }: Props) {
 
   return (
     <div className="relative">
-      <div className="flex items-center border border-[#222222] bg-[#131313] rounded-lg px-4 py-2.5 focus-within:border-[#00e5ff] focus-within:shadow-[0_0_12px_rgba(0,229,255,0.1)] transition-all duration-200">
+      <div className="flex items-center border border-[#222222] bg-[#131313] rounded-lg px-4 py-2.5 focus-within:border-[#ff004d] focus-within:shadow-[0_0_12px_rgba(255,0,77,0.1)] transition-all duration-200">
         <input
           ref={inputRef}
           type="search"
@@ -42,7 +42,7 @@ export default function SearchBar({ onSearch, loading }: Props) {
         )}
         <button
           onClick={() => { clearTimeout(timerRef.current); onSearch(value) }}
-          className="text-xs px-3 py-1 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all ml-2"
+          className="text-xs px-3 py-1 rounded-md border border-[#222222] text-[#666666] hover:text-[#ff004d] hover:border-[#ff004d] transition-all ml-2"
         >
           Search
         </button>

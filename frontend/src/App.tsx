@@ -337,7 +337,7 @@ export default function App() {
 
           <div className="flex items-center gap-0 mb-5 border-b border-[#222222]">
             <button onClick={() => { fetchStats({}); setCurrentTab('dashboard') }}
-              className={`text-sm px-4 py-2 ${currentTab === 'dashboard' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
+              className={`text-sm px-4 py-2 ${currentTab === 'dashboard' ? 'text-[#ff004d] border-b-2 border-[#ff004d]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Dashboard
             </button>
             <button onClick={() => {
@@ -345,11 +345,11 @@ export default function App() {
                 fetch('/api/llm/config').then(r => r.json()).then(d => setLlmConfigured(d.configured)).catch(() => {})
                 setCurrentTab('pastes')
               }}
-              className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
+              className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#ff004d] border-b-2 border-[#ff004d]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Pastes
             </button>
             <button onClick={() => setCurrentTab('config')}
-              className={`text-sm px-4 py-2 ${currentTab === 'config' ? 'text-[#00e5ff] border-b-2 border-[#00e5ff]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
+              className={`text-sm px-4 py-2 ${currentTab === 'config' ? 'text-[#ff004d] border-b-2 border-[#ff004d]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Config
             </button>
           </div>
@@ -394,15 +394,15 @@ export default function App() {
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs text-[#444444] mr-1">Group</span>
                   <button onClick={() => { setGroupBy(''); applyAll({ groupBy: '' }) }}
-                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${!groupBy ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${!groupBy ? 'border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'}`}>
                     None
                   </button>
                   <button onClick={() => { setGroupBy('source'); applyAll({ groupBy: 'source' }) }}
-                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'source' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'source' ? 'border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5' : 'border-[#222222] text-[#555555]'}`}>
                     Source
                   </button>
                   <button onClick={() => { setGroupBy('content_type'); applyAll({ groupBy: 'content_type' }) }}
-                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] text-[#555555]'}`}>
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5' : 'border-[#222222] text-[#555555]'}`}>
                     Type
                   </button>
                 </div>
@@ -431,7 +431,7 @@ export default function App() {
                   style={{ backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)' }}>
                   <div className="relative flex flex-col items-center gap-4">
                     {/* Spinner */}
-                    <div className="w-10 h-10 rounded-full border-2 border-transparent border-t-[#00e5ff] border-r-[#00e5ff]/60 animate-spin"
+                    <div className="w-10 h-10 rounded-full border-2 border-transparent border-t-[#ff004d] border-r-[#ff004d]/60 animate-spin"
                       style={{ animation: 'spin 0.8s linear infinite' }} />
                     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                     <div className="text-xs text-[#555555]">Loading...</div>

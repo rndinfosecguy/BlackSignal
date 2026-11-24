@@ -21,7 +21,7 @@ interface Props {
   onDateToChange: (d: string) => void
 }
 
-const ACTIVE = 'border-[#00e5ff] text-[#00e5ff] bg-[#00e5ff]/5'
+const ACTIVE = 'border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5'
 const INACTIVE = 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-[#888888]'
 
 const PERSONAL_TYPES = ['personal_email','ssn','btc_address','eth_address','passport','name_dob']
@@ -43,7 +43,7 @@ const Pill = ({ label, dotColor, onRemove, onClick }: {
 }) => (
   <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-[#222222] bg-[#1a1a1a]">
     {dotColor && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />}
-    <span onClick={onClick} className="text-[#888888] cursor-pointer hover:text-[#00e5ff]">{label}</span>
+    <span onClick={onClick} className="text-[#888888] cursor-pointer hover:text-[#ff004d]">{label}</span>
     <button onClick={e => { e.stopPropagation(); onRemove() }} className="text-[#555555] hover:text-[#ff004d] ml-1 leading-none">&times;</button>
   </div>
 )
@@ -106,7 +106,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
     pills.push({ key: `src:${s}`, label: s, dotColor: sourceColor(s), onRemove: () => onSourcesChange(activeSources.filter(x => x !== s)), filterId: 'source' })
   })
   activeTypes.forEach(t => {
-    pills.push({ key: `type:${t}`, label: t, dotColor: '#00e5ff', onRemove: () => onTypesChange(activeTypes.filter(x => x !== t)), filterId: 'type' })
+    pills.push({ key: `type:${t}`, label: t, dotColor: '#ff004d', onRemove: () => onTypesChange(activeTypes.filter(x => x !== t)), filterId: 'type' })
   })
   if (hasSecrets) {
     pills.push({ key: 'secrets', label: 'Has secrets', dotColor: '#ff004d', onRemove: () => onHasSecretsToggle(), filterId: 'secrets' })
@@ -117,7 +117,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
   })
   if (dateFrom || dateTo) {
     const dl = dateFrom && dateTo ? `${dateFrom} to ${dateTo}` : dateFrom || dateTo || ''
-    pills.push({ key: 'date', label: dl, dotColor: '#00e5ff', onRemove: () => { onDateFromChange(''); onDateToChange('') }, filterId: 'date' })
+    pills.push({ key: 'date', label: dl, dotColor: '#ff004d', onRemove: () => { onDateFromChange(''); onDateToChange('') }, filterId: 'date' })
   }
 
   // Dummy use of pendingVer to silence unused-variable warning — it drives re-render
@@ -156,13 +156,13 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
             {!overlayView && (
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { id: 'source', label: 'Source', active: pending.current.sources.length, color: '#00e5ff' },
-                  { id: 'type', label: 'Type', active: pending.current.types.length, color: '#00e5ff' },
+                  { id: 'source', label: 'Source', active: pending.current.sources.length, color: '#ff004d' },
+                  { id: 'type', label: 'Type', active: pending.current.types.length, color: '#ff004d' },
                   { id: 'secrets', label: 'Secrets', active: (pending.current.hasSecrets || pending.current.secretTypes.length) ? 1 : 0, color: '#ff004d' },
-                  { id: 'date', label: 'Date range', active: (pending.current.dateFrom || pending.current.dateTo) ? 1 : 0, color: '#00e5ff' },
+                  { id: 'date', label: 'Date range', active: (pending.current.dateFrom || pending.current.dateTo) ? 1 : 0, color: '#ff004d' },
                 ].map(cat => (
                   <button key={cat.id} onClick={() => setOverlayView(cat.id)}
-                    className={`text-left px-4 py-3 rounded-lg border transition-all cursor-pointer ${cat.active > 0 ? 'border-[#00e5ff] bg-[#00e5ff]/5' : 'border-[#222222] hover:border-[#444444]'}`}>
+                    className={`text-left px-4 py-3 rounded-lg border transition-all cursor-pointer ${cat.active > 0 ? 'border-[#ff004d] bg-[#ff004d]/5' : 'border-[#222222] hover:border-[#444444]'}`}>
                     <div className="text-sm font-medium" style={{ color: cat.active > 0 ? cat.color : '#888888' }}>{cat.label}</div>
                     <div className="text-[10px] text-[#555555] mt-0.5">
                       {cat.id === 'source' ? (cat.active > 0 ? `${cat.active} selected` : 'Any source') : 

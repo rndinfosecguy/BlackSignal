@@ -25,7 +25,7 @@ export default function Pagination({ page, totalPages, total, onChange }: Props)
           typeof p === 'number' ? (
             <button key={i} onClick={() => onChange(p)}
               className={`text-sm px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                p === page ? 'text-[#00e5ff] border border-[#00e5ff] bg-[#00e5ff]/5' : 'text-[#666666] hover:text-[#888888]'
+                p === page ? 'text-[#ff004d] border border-[#ff004d] bg-[#ff004d]/5' : 'text-[#666666] hover:text-[#888888]'
               }`}>
               {p}
             </button>
