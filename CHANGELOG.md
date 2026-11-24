@@ -6,6 +6,35 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.13.1] — 2026-11-24
+
+### Fixed
+- **LLM report no longer freezes the app on large datasets.** The 500-paste cap was
+  checked only after every matching paste had been loaded into memory with its full
+  content. The cap is now enforced with a cheap `COUNT(*)` before any content is read,
+  results are hard-capped in SQL, and paste bodies are fetched lazily one at a time.
+- **API responsiveness while indexing.** The indexer runs CPU-bound detection in threads
+  inside the same process as the web server, and Python's `re` engine holds the GIL, so
+  heavy scans could starve the event loop and stall `/api/index-status` (which delayed the
+  loading overlay). Mitigations: startup no longer blocks on a full stats scan, the stats
+  warm-up waits until the indexer is idle, the GIL switch interval is lowered to 1 ms, and
+  the scan loop yields periodically between lines.
+- **Index status polling.** The frontend polled only every 60 s, so a single failed poll
+  after a restart delayed the loading overlay by up to a minute. It now polls every 3 s
+  while indexing, before the first data load, or after a failed request, and every 60 s
+  when idle.
+- **LLM report progress bar.** It reset to 0 when per-paste analysis finished. It now stays
+  full during the final aggregation, which is labelled "Synthesizing final report…".
+- **Config tab "Total indexed"** was misleading — it is the number of files found on disk
+  during the last run (including <32-byte files skipped at index time), not the database
+  row count. Renamed to **"Files found (last run)"** with a tooltip, and the value now
+  refreshes every 15 s while the tab is open.
+- **Paste detail spacing** — the first block in the scroll area no longer sticks to the
+  top border.
+- The LLM loading spinner in the paste detail now uses the red LLM accent instead of cyan.
+
+---
+
 ## [1.13.0] — 2026-11-23
 
 ### Added

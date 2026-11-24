@@ -3,7 +3,9 @@ import csv
 import io
 import logging
 import re
+import sys
 import threading
+import time
 import zipfile
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -15,13 +17,19 @@ from fastapi.responses import FileResponse, StreamingResponse, Response
 import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, export_pastes, get_paste_by_id, get_sources, \
-    get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data, DB_PATH
+    get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data, DB_PATH, count_pastes
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running, get_scheduler_info, reschedule_interval
 import llm
 import json as _json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("blacksignal")
+
+# Indexing runs CPU-bound detection in threads inside this same process (no
+# multiprocessing by design). A shorter GIL switch interval lets the ASGI event
+# loop preempt those threads more often, keeping API calls responsive during a
+# large index run at a negligible throughput cost.
+sys.setswitchinterval(0.001)
 
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 REINDEX_INTERVAL = int(os.environ.get("REINDEX_INTERVAL", "300"))
@@ -117,8 +125,22 @@ def clear_cache():
 async def lifespan(app: FastAPI):
     init_db()
 
-    # Pre-compute unfiltered stats so the first user never hits the cold path
-    _get_stats_cached(None, None, None, None, (), None, None)
+    # Warm the stats cache in a background thread. Running this directly here
+    # would block ASGI startup (uvicorn does not accept requests until lifespan
+    # startup returns), and on a large database the full-scan COUNT is slow —
+    # which delayed the UI and made the first /api/index-status poll fail.
+    def _warm_stats():
+        try:
+            # Wait for the initial index run to finish: it starts immediately at
+            # boot and the UI blocks data calls while indexing anyway, so scanning
+            # now would only compete with it for CPU/IO.
+            while get_index_progress().get("running"):
+                time.sleep(2)
+            _get_stats_cached(None, None, None, None, (), None, None)
+        except Exception:
+            logger.exception("Stats warm-up failed (non-fatal)")
+
+    threading.Thread(target=_warm_stats, daemon=True).start()
 
     threading.Thread(target=index_all_pastes, daemon=True).start()
     start_scheduler(REINDEX_INTERVAL)
@@ -421,6 +443,10 @@ def api_llm_key_delete():
 
 # --- LLM Report ----------------------------------------------------------------
 
+# Hard cap on pastes per report run. Enforced with a cheap COUNT before any
+# paste content is loaded, so an unfiltered run over a large DB fails fast.
+MAX_REPORT_PASTES = 500
+
 
 def _build_detailed_findings(findings: list, max_rows: int = 2000) -> str:
     """Build a deduplicated markdown table of findings from BlackSignal detections."""
@@ -487,25 +513,45 @@ def api_llm_report(
     if llm.get_report_progress().get("running"):
         raise HTTPException(status_code=409, detail="A report is already in progress")
 
-    # Collect matching pastes (same filter logic as export)
+    # Count first — cheap COUNT with no row content — so an unfiltered run over a
+    # large database fails fast instead of materializing every paste into memory.
     query_norm = normalize_fts_query(q)
     has_sec = _parse_bool(has_secrets)
     secret_types = secret_type if secret_type else None
+    total = count_pastes(
+        query=query_norm,
+        source=source or None,
+        content_type=content_type or None,
+        has_secrets=has_sec,
+        secret_types=secret_types,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    if total == 0:
+        return {"status": "done", "report": "No pastes matched the current filters."}
+    if total > MAX_REPORT_PASTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{total} pastes match — narrow your filters (max {MAX_REPORT_PASTES})",
+        )
+
+    # Metadata + secrets only (no content) and hard-capped at the limit. Full paste
+    # content is fetched lazily per paste inside the worker thread so we never hold
+    # every paste body in memory at once.
     rows = list(export_pastes(
         query=query_norm,
         source=source or None,
         content_type=content_type or None,
         has_secrets=has_sec,
         secret_types=secret_types,
-        include_content=True,
+        include_content=False,
         date_from=date_from,
         date_to=date_to,
+        limit=MAX_REPORT_PASTES,
     ))
     total = len(rows)
     if total == 0:
         return {"status": "done", "report": "No pastes matched the current filters."}
-    if total > 500:
-        raise HTTPException(status_code=400, detail=f"{total} pastes match — narrow your filters (max 500)")
 
     def _generate():
         llm._set_report_running(total)
@@ -524,7 +570,10 @@ def api_llm_report(
             pid = row.get("id", "unknown")
             row_source = row.get("source", "?")
             filename = row.get("filename", pid)
-            content = row.get("content", "")
+            # Content is fetched lazily (one paste at a time) so we never hold all
+            # paste bodies in memory simultaneously.
+            paste = get_paste_by_id(pid)
+            content = (paste or {}).get("content", "") or ""
             row_type = row.get("content_type", "?")
             row_has_secrets = row.get("has_secrets", 0)
             row_has_passwords = row.get("has_passwords", 0)
@@ -579,7 +628,7 @@ def api_llm_report(
         if llm.is_report_cancelled():
             return
         # Final aggregation (narrative sections only — detailed findings are appended below)
-        llm._set_report_progress(0, phase="aggregating")
+        llm._set_report_progress(total, phase="aggregating")
         if summaries:
             all_text = "\n---\n".join(summaries)
             try:

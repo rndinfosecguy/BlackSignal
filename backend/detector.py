@@ -1,5 +1,6 @@
 import re
 import os
+import time
 
 SEARCH_TERMS_FILE = os.environ.get("SEARCH_TERMS_FILE", "/app/configs/searchterms.txt")
 if not os.path.exists(SEARCH_TERMS_FILE):
@@ -245,6 +246,13 @@ def scan_content(content, scan_limit=None):
     lines = scan_text.split("\n")
 
     for i, line in enumerate(lines, 1):
+        # Yield the GIL periodically. Indexing runs as CPU-bound threads in the
+        # same process as the web server (no multiprocessing by design), and the
+        # `re` engine holds the GIL while matching — without explicit yield points
+        # heavy scans can starve the ASGI event loop and stall API calls such as
+        # /api/index-status during a large index run.
+        if (i & 255) == 0:
+            time.sleep(0)
         # Fast pre-filter: skip lines that can't match any pattern
         if not _HAS_TRIGGER.search(line):
             continue
@@ -430,6 +438,8 @@ def scan_content(content, scan_limit=None):
 
     for pattern in SEARCH_TERM_PATTERNS:
         for i, line in enumerate(lines, 1):
+            if (i & 255) == 0:
+                time.sleep(0)
             for match in pattern.finditer(line):
                 findings.append({
                     "type": "search_term",

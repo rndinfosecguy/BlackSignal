@@ -45,18 +45,29 @@ export default function ConfigTab({ onReindex }: Props) {
       .then(r => r.json())
       .then(setDbStats)
       .catch(() => {})
-    fetch('/api/indexer-info')
-      .then(r => r.json())
-      .then(setIndexerInfo)
-      .catch(() => {})
-    fetch('/api/last-reindex')
-      .then(r => r.json())
-      .then(d => setLastReindex(Object.keys(d).length > 0 ? d : null))
-      .catch(() => {})
     fetch('/api/llm/key')
       .then(r => r.json())
       .then(d => setKeyPreview(d.key_preview || ''))
       .catch(() => {})
+  }, [])
+
+  // Indexer state changes at runtime (reindex runs, interval changes) — keep the
+  // in-memory endpoints fresh while this tab is open instead of a one-shot read.
+  useEffect(() => {
+    let cancelled = false
+    const loadIndexer = () => {
+      fetch('/api/indexer-info')
+        .then(r => r.json())
+        .then(d => { if (!cancelled) setIndexerInfo(d) })
+        .catch(() => {})
+      fetch('/api/last-reindex')
+        .then(r => r.json())
+        .then(d => { if (!cancelled) setLastReindex(Object.keys(d).length > 0 ? d : null) })
+        .catch(() => {})
+    }
+    loadIndexer()
+    const interval = setInterval(loadIndexer, 15000)
+    return () => { cancelled = true; clearInterval(interval) }
   }, [])
 
   const handleEdit = () => {
@@ -260,7 +271,10 @@ export default function ConfigTab({ onReindex }: Props) {
             </div>
           </div>
           <div>
-            <div className="text-xs text-[#555555] mb-1">Total indexed</div>
+            <div className="text-xs text-[#555555] mb-1"
+              title="Files discovered under raw_pastes during the last index run. Includes files skipped as too small (<32 bytes), so it can be higher than the number of pastes in the database.">
+              Files found (last run)
+            </div>
             <div className="text-sm text-[#e8e8e8]">
               {lastReindex ? lastReindex.total.toLocaleString() : '...'}
             </div>

@@ -275,17 +275,38 @@ def search_pastes(query=None, source=None, content_type=None,
     }
 
 
+def count_pastes(query=None, source=None, content_type=None,
+                 has_secrets=None, secret_types=None,
+                 date_from=None, date_to=None) -> int:
+    """Cheap COUNT of pastes matching the filters — no row content is loaded.
+
+    Use this to enforce limits before materializing results."""
+    conn = get_conn()
+    conditions, params = build_filter_conditions(
+        query, source, content_type, has_secrets, secret_types,
+        date_from=date_from, date_to=date_to,
+    )
+    where = " AND ".join(conditions) if conditions else "1=1"
+    return conn.execute(f"SELECT COUNT(*) FROM pastes p WHERE {where}", params).fetchone()[0]
+
+
 def export_pastes(query=None, source=None, content_type=None,
                   has_secrets=None, secret_types=None, include_content=False,
-                  date_from=None, date_to=None):
+                  date_from=None, date_to=None, limit=None):
     """Generator yielding paste dicts matching the current filters.
-    Used by the /api/pastes/export endpoint — no LIMIT/OFFSET.
+    Used by the /api/pastes/export endpoint and the LLM report builder.
+    Pass ``limit`` to cap the number of rows loaded (recommended for callers
+    that must not materialize an entire large collection).
     secrets_detail is parsed into a proper Python list for JSON serialization."""
     conn = get_conn()
     conditions, params = build_filter_conditions(query, source, content_type, has_secrets, secret_types, date_from=date_from, date_to=date_to)
     where = " AND ".join(conditions) if conditions else "1=1"
 
     content_col = ", p.content" if include_content else ""
+    limit_sql = ""
+    if limit is not None:
+        # Cast to int defensively — never interpolate caller strings into SQL.
+        limit_sql = f" LIMIT {int(limit)}"
     data_sql = f"""
         SELECT p.id, p.filename, p.source, p.content_type, p.size,
                p.has_passwords, p.has_secrets, p.secret_types, p.secrets_detail,
@@ -293,7 +314,7 @@ def export_pastes(query=None, source=None, content_type=None,
                {content_col}
         FROM pastes p
         WHERE {where}
-        ORDER BY p.first_seen DESC
+        ORDER BY p.first_seen DESC{limit_sql}
     """
     import json
     rows = conn.execute(data_sql, params).fetchall()

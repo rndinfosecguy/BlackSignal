@@ -245,7 +245,7 @@ export default function PasteDetail({ id, onClose }: Props) {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto overflow-x-scroll px-4 pb-4">
+        <div className="flex-1 overflow-y-auto overflow-x-scroll px-4 pt-4 pb-4">
           {loading ? (
             <div className="flex items-center justify-center h-32 text-[#555555]">Loading...</div>
           ) : fetchError ? (
@@ -260,7 +260,7 @@ export default function PasteDetail({ id, onClose }: Props) {
             {llmLoading && (
               <div className="bg-[#0a0a0a] border border-[#222222] rounded-lg p-4 mb-3">
                 <div className="flex items-center gap-3 text-xs text-[#555555]">
-                  <span className="inline-block w-4 h-4 rounded-full border-2 border-transparent border-t-[#00e5ff] border-r-[#00e5ff]/60 animate-spin" />
+                  <span className="inline-block w-4 h-4 rounded-full border-2 border-transparent border-t-[#ff004d] border-r-[#ff004d]/60 animate-spin" />
                   Contacting LLM for analysis...
                 </div>
               </div>

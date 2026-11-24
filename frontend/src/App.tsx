@@ -35,7 +35,7 @@ export default function App() {
   const [reindexToast, setReindexToast] = useState<string | null>(null)
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false)
   const [llmReportRunning, setLlmReportRunning] = useState(false)
-  const [llmReportProgress, setLlmReportProgress] = useState<{ current: number; total: number } | null>(null)
+  const [llmReportProgress, setLlmReportProgress] = useState<{ current: number; total: number; phase?: string } | null>(null)
   const [llmReportResult, setLlmReportResult] = useState<string | null>(null)
   const [llmReportError, setLlmReportError] = useState<string | null>(null)
   const [showLlmReport, setShowLlmReport] = useState(false)
@@ -213,7 +213,7 @@ export default function App() {
         setLlmReportRunning(false)
         return
       }
-      setLlmReportProgress({ current: 0, total: data.total })
+      setLlmReportProgress({ current: 0, total: data.total, phase: 'analyzing' })
 
       // Poll for completion
       const poll = setInterval(async () => {
@@ -221,7 +221,7 @@ export default function App() {
           const pr = await fetch('/api/llm/report-status')
           const pd = await pr.json()
           if (pd.running) {
-            setLlmReportProgress({ current: pd.current || 0, total: pd.total || 0 })
+            setLlmReportProgress({ current: pd.current || 0, total: pd.total || 0, phase: pd.phase })
           } else {
             clearInterval(poll)
             setLlmReportRunning(false)
@@ -669,7 +669,11 @@ export default function App() {
               {llmReportRunning && (
                 <div className="py-8 text-center">
                   <div className="inline-block w-8 h-8 rounded-full border-2 border-transparent border-t-[#ff004d] border-r-[#ff004d]/60 animate-spin mb-3" />
-                  <div className="text-sm text-[#555555] mb-2">Analyzing pastes with LLM...</div>
+                  <div className="text-sm text-[#555555] mb-2">
+                    {llmReportProgress?.phase === 'aggregating'
+                      ? 'Synthesizing final report...'
+                      : 'Analyzing pastes with LLM...'}
+                  </div>
                   {llmReportProgress && (
                     <div className="text-xs text-[#444444]">
                       {llmReportProgress.current} / {llmReportProgress.total} pastes analyzed

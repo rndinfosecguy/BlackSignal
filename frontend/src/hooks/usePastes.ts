@@ -169,7 +169,10 @@ export function usePastes() {
     if (data) setSecretTypes(data)
   }, [])
 
-  // Poll index status every 60s; fetch initial data once when the indexer is idle
+  // Poll index status adaptively: every 3s while indexing or before the first
+  // successful load (so a restart shows the overlay promptly), then every 60s
+  // once idle. A fixed 60s interval meant one failed poll after a restart
+  // delayed the loading screen by a full minute.
   useEffect(() => {
     let cancelled = false
     let timeout: ReturnType<typeof setTimeout>
@@ -228,7 +231,12 @@ export function usePastes() {
           })
         }
       }
-      if (!cancelled) timeout = setTimeout(poll, 60000)
+      if (!cancelled) {
+        // Fast retry while indexing, before the first load, or when the request
+        // failed (data is null) — e.g. the backend was still starting up.
+        const fast = !dataLoaded || !data || data.running || wasRunning
+        timeout = setTimeout(poll, fast ? 3000 : 60000)
+      }
     }
 
     poll()
