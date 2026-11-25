@@ -6,6 +6,22 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.13.3] — 2026-11-25
+
+### Changed
+- **Clearer Config-tab file counts.** The Database section now separates two scopes that
+  previously looked interchangeable: **Indexable files** (regular files directly inside
+  each source folder — exactly what the indexer scans) and **Files on disk (recursive)**
+  (everything under `raw_pastes/`, including nested folders and files outside source
+  folders, which the indexer ignores). When the recursive count is higher, a hint shows
+  how many files won't be indexed. The Indexing section's count is relabelled
+  **Files scanned (last run)** to make clear it is a historical snapshot, not a live count.
+- `GET /api/db-stats` now returns `indexable_files_count` and `raw_files_total`
+  (replacing `raw_pastes_count`). `indexable_files_count` is computed via the indexer's
+  own `walk_pastes()`, so the two can no longer drift apart by definition.
+
+---
+
 ## [1.13.2] — 2026-11-24
 
 ### Changed

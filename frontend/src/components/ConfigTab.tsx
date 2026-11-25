@@ -4,7 +4,8 @@ interface DbStats {
   db_size_bytes: number
   paste_count: number
   raw_pastes_size_bytes: number
-  raw_pastes_count: number
+  raw_files_total: number
+  indexable_files_count: number
 }
 
 interface IndexerInfo {
@@ -273,7 +274,7 @@ export default function ConfigTab({ onReindex }: Props) {
           <div>
             <div className="text-xs text-[#555555] mb-1"
               title="Files discovered under raw_pastes during the last index run. Includes files skipped as too small (<32 bytes), so it can be higher than the number of pastes in the database.">
-              Files found (last run)
+              Files scanned (last run)
             </div>
             <div className="text-sm text-[#e8e8e8]">
               {lastReindex ? lastReindex.total.toLocaleString() : '...'}
@@ -369,7 +370,8 @@ export default function ConfigTab({ onReindex }: Props) {
           Database
         </div>
         {dbStats ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
               <div className="text-xs text-[#555555] mb-1">Database file size</div>
               <div className="text-sm text-[#e8e8e8]">{fmt(dbStats.db_size_bytes)}</div>
@@ -383,10 +385,27 @@ export default function ConfigTab({ onReindex }: Props) {
               <div className="text-sm text-[#e8e8e8]">{fmt(dbStats.raw_pastes_size_bytes)}</div>
             </div>
             <div>
-              <div className="text-xs text-[#555555] mb-1">Raw paste files</div>
-              <div className="text-sm text-[#e8e8e8]">{dbStats.raw_pastes_count.toLocaleString()}</div>
+              <div className="text-xs text-[#555555] mb-1"
+                title="Regular files directly inside each source folder — the files the indexer will scan.">
+                Indexable files
+              </div>
+              <div className="text-sm text-[#e8e8e8]">{dbStats.indexable_files_count.toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-xs text-[#555555] mb-1"
+                title="All files under raw_pastes, recursively — including nested folders and files outside source folders, which the indexer ignores.">
+                Files on disk (recursive)
+              </div>
+              <div className="text-sm text-[#e8e8e8]">{dbStats.raw_files_total.toLocaleString()}</div>
             </div>
           </div>
+          {dbStats.raw_files_total > dbStats.indexable_files_count && (
+            <div className="text-xs text-[#ffd700]/80 mt-3"
+              title="Files nested in subfolders or placed directly in raw_pastes/ are not indexed. Only files directly inside a source folder are scanned.">
+              {(dbStats.raw_files_total - dbStats.indexable_files_count).toLocaleString()} file(s) won't be indexed (nested or outside source folders)
+            </div>
+          )}
+          </>
         ) : (
           <div className="text-xs text-[#555555]">Loading...</div>
         )}

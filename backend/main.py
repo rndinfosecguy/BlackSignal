@@ -746,12 +746,21 @@ def api_db_stats():
     raw_path = indexer_module.RAW_PASTES_DIR
     raw_size = _get_dir_size(raw_path)
     raw_count = _get_file_count(raw_path)
+    # Files the indexer will actually scan: regular files directly inside each
+    # top-level source folder. Reuse walk_pastes() so this matches the indexer
+    # exactly instead of re-implementing the walk semantics.
+    try:
+        indexable_count = len(indexer_module.walk_pastes())
+    except Exception:
+        logger.exception("Failed to count indexable files")
+        indexable_count = 0
 
     return {
         "db_size_bytes": db_size,
         "paste_count": paste_count,
         "raw_pastes_size_bytes": raw_size,
-        "raw_pastes_count": raw_count,
+        "raw_files_total": raw_count,
+        "indexable_files_count": indexable_count,
     }
 
 
