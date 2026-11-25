@@ -2,11 +2,9 @@ import os
 import csv
 import io
 import logging
-import re
 import sys
 import threading
 import time
-import zipfile
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
@@ -20,6 +18,7 @@ from database import init_db, build_filter_conditions, search_pastes, search_pas
     get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data, DB_PATH, count_pastes
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running, get_scheduler_info, reschedule_interval
 import llm
+import reports
 import json as _json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -410,12 +409,28 @@ def api_llm_summarize(paste_id: str):
         raise HTTPException(status_code=400, detail="Paste has no content")
     try:
         summary = llm.summarize_paste(paste_id, content)
-        return {"summary": summary}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         logger.error("LLM summarize failed for %s: %s", paste_id, e)
         raise HTTPException(status_code=502, detail=str(e))
+
+    # Persist to the report archive (best-effort — never fail the analysis).
+    report_id = None
+    try:
+        report_id = reports.save_single(
+            {
+                "paste_id": paste_id,
+                "source": paste.get("source"),
+                "filename": paste.get("filename"),
+            },
+            summary,
+            model=llm.MODEL,
+        )
+    except Exception:
+        logger.exception("Failed to archive single-paste report %s", paste_id)
+
+    return {"summary": summary, "report_id": report_id}
 
 
 @app.get("/api/llm/key")
@@ -478,26 +493,6 @@ def _build_detailed_findings(findings: list, max_rows: int = 2000) -> str:
     return "\n".join(lines)
 
 
-def _safe_zip_filename(source: str, filename: str, paste_id: str, used: set) -> str:
-    """Build a filesystem-safe, unique name for a per-paste report inside the ZIP."""
-    base = f"{source}_{filename}" if filename else f"{source}_{paste_id}"
-    # Replace path separators and other unsafe characters
-    safe = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", base)
-    safe = " ".join(safe.split())        # collapse whitespace
-    safe = safe.strip(". ")
-    if not safe:
-        safe = "paste"
-    if len(safe) > 120:
-        safe = safe[:120]
-    candidate = f"{safe}.md"
-    n = 2
-    while candidate.lower() in used:
-        candidate = f"{safe}-{n}.md"
-        n += 1
-    used.add(candidate.lower())
-    return candidate
-
-
 @app.post("/api/llm/report")
 def api_llm_report(
     q: str = Query("", description="Search query"),
@@ -558,6 +553,8 @@ def api_llm_report(
         summaries = []
         per_paste_files = []
         used_names: set = set()
+        # Structured list of every paste included in the report (written to pastes.json).
+        pastes_meta: list = []
         # Deterministic, deduplicated findings collected directly from BlackSignal's
         # own regex detections (avoids the LLM repeating the same finding many times).
         findings = []
@@ -579,6 +576,18 @@ def api_llm_report(
             row_has_passwords = row.get("has_passwords", 0)
             secret_types = row.get("secret_types", [])
             secrets_detail = row.get("secrets_detail") or []
+
+            pastes_meta.append({
+                "id": pid,
+                "source": row_source,
+                "filename": filename,
+                "content_type": row_type,
+                "size": row.get("size", 0),
+                "has_secrets": bool(row_has_secrets),
+                "has_passwords": bool(row_has_passwords),
+                "secret_types": secret_types,
+                "first_seen": row.get("first_seen"),
+            })
 
             for sd in secrets_detail:
                 match = (sd.get("match") or "").strip()
@@ -614,14 +623,20 @@ def api_llm_report(
                 )
                 summaries.append(entry)
                 per_paste_files.append({
-                    "filename": _safe_zip_filename(row_source, filename, pid, used_names),
+                    "filename": reports.safe_filename(
+                        f"{row_source}_{filename}" if filename else f"{row_source}_{pid}",
+                        used_names,
+                    ),
                     "content": entry,
                 })
             except (ValueError, RuntimeError) as e:
                 fail_entry = f"### Paste: {row_source}:{filename}\n\n*Analysis failed: {e}*\n"
                 summaries.append(fail_entry)
                 per_paste_files.append({
-                    "filename": _safe_zip_filename(row_source, filename, pid, used_names),
+                    "filename": reports.safe_filename(
+                        f"{row_source}_{filename}" if filename else f"{row_source}_{pid}",
+                        used_names,
+                    ),
                     "content": fail_entry,
                 })
             llm._set_report_progress(i + 1)
@@ -643,7 +658,29 @@ def api_llm_report(
                     f"has_secrets={has_secrets}, secret_type={secret_type}\n\n---\n\n"
                 )
                 detailed = _build_detailed_findings(findings)
-                llm._set_report_done(header + final + "\n\n" + detailed, per_paste_files)
+                report_text = header + final + "\n\n" + detailed
+                llm._set_report_done(report_text, per_paste_files)
+                # Persist to the report archive (best-effort — never fail the run).
+                try:
+                    reports.save_batch(
+                        {
+                            "filters": {
+                                "q": q,
+                                "source": source,
+                                "content_type": content_type,
+                                "has_secrets": has_secrets,
+                                "secret_type": secret_type,
+                                "date_from": date_from,
+                                "date_to": date_to,
+                            },
+                        },
+                        report_text,
+                        per_paste_files,
+                        model=llm.MODEL,
+                        pastes=pastes_meta,
+                    )
+                except Exception:
+                    logger.exception("Failed to archive batch report")
             except (ValueError, RuntimeError) as e:
                 llm._set_report_error(str(e))
         else:
@@ -665,38 +702,73 @@ def api_llm_report_cancel():
 
 @app.get("/api/llm/report-download")
 def api_llm_report_download():
-    progress = llm.get_report_progress()
-    report = progress.get("final_report")
-    if not report:
-        raise HTTPException(status_code=404, detail="No completed report available")
+    """Backward-compatible alias: download the newest archived batch report."""
+    for meta in reports.list_reports():
+        if meta.get("type") == "batch":
+            data = reports.build_zip(meta["id"])
+            if data is not None:
+                return Response(
+                    content=data,
+                    media_type="application/zip",
+                    headers={
+                        "Content-Disposition": 'attachment; filename="blacksignal-llm-report.zip"',
+                        "Content-Length": str(len(data)),
+                    },
+                )
+            break
+    raise HTTPException(status_code=404, detail="No completed report available")
 
-    files = llm.get_report_files() or []
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Overall report at the archive root
-        zf.writestr("report.md", report)
-        readme = (
-            "# BlackSignal — LLM Report Bundle\n\n"
-            "This archive contains:\n\n"
-            "- `report.md` — the aggregated security report across all analyzed pastes.\n"
-            "- `pastes/` — one markdown analysis per analyzed paste.\n\n"
-            f"Pastes bundled: {len(files)}\n"
+# --- Report archive -----------------------------------------------------------
+
+
+@app.get("/api/reports")
+def api_reports_list():
+    return {"reports": reports.list_reports()}
+
+
+@app.get("/api/reports/{report_id}/download")
+def api_report_download(report_id: str):
+    item = reports.get_report(report_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Report not found")
+    meta = item["meta"]
+    if meta.get("type") == "batch":
+        data = reports.build_zip(report_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Report not found")
+        return Response(
+            content=data,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="blacksignal-report-{report_id}.zip"',
+                "Content-Length": str(len(data)),
+            },
         )
-        zf.writestr("README.md", readme)
-        # Per-paste analyses in a subfolder
-        for f in files:
-            zf.writestr(f"pastes/{f['filename']}", f["content"])
-
-    data = buf.getvalue()
+    content = item["markdown"].encode("utf-8")
     return Response(
-        content=data,
-        media_type="application/zip",
+        content=content,
+        media_type="text/markdown; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="blacksignal-llm-report.zip"',
-            "Content-Length": str(len(data)),
+            "Content-Disposition": f'attachment; filename="blacksignal-report-{report_id}.md"',
+            "Content-Length": str(len(content)),
         },
     )
+
+
+@app.get("/api/reports/{report_id}")
+def api_report_get(report_id: str):
+    item = reports.get_report(report_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return item
+
+
+@app.delete("/api/reports/{report_id}")
+def api_report_delete(report_id: str):
+    if not reports.delete_report(report_id):
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"status": "deleted"}
 
 
 # --- Database / config stats --------------------------------------------------

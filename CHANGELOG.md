@@ -6,6 +6,28 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.14.0] — 2026-11-25
+
+### Added
+- **Report Archive tab** — LLM reports are now persisted to `data/reports/` and survive
+  restarts. A new tab between *Pastes* and *Config* lists every archived report with
+  type (Single / Batch), title, timestamp and paste count, and offers **View** (rendered
+  markdown), **Download** (single → `.md`, batch → `.zip` with `report.md`,
+  `pastes.json` and `pastes/*.md`)
+  and **Delete** (with confirmation).
+- **Automatic persistence** — each "Analyze with LLM" run saves a single-paste report;
+  each completed batch report is saved with its per-paste analyses plus `pastes.json`,
+  a structured list of the pastes included (source, ID, filename, content type, size,
+  detection flags). Storage failures are logged and never fail the analysis itself.
+- **New API endpoints** — `GET /api/reports`, `GET /api/reports/{id}`,
+  `GET /api/reports/{id}/download`, `DELETE /api/reports/{id}`.
+  `GET /api/llm/report-download` is kept as a backward-compatible alias for the newest
+  archived batch report.
+- **Retention** — the archive keeps the newest `REPORT_ARCHIVE_MAX` reports (default 100)
+  and prunes older ones on save.
+
+---
+
 ## [1.13.3] — 2026-11-25
 
 ### Changed

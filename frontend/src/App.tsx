@@ -7,6 +7,7 @@ import PasteDetail from './components/PasteDetail'
 import StatsDashboard from './components/StatsDashboard'
 import Pagination from './components/Pagination'
 import ConfigTab from './components/ConfigTab'
+import ReportArchive from './components/ReportArchive'
 import { usePastes } from './hooks/usePastes'
 import type { FilterState } from './hooks/usePastes'
 
@@ -348,6 +349,10 @@ export default function App() {
               className={`text-sm px-4 py-2 ${currentTab === 'pastes' ? 'text-[#ff004d] border-b-2 border-[#ff004d]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Pastes
             </button>
+            <button onClick={() => setCurrentTab('reports')}
+              className={`text-sm px-4 py-2 ${currentTab === 'reports' ? 'text-[#ff004d] border-b-2 border-[#ff004d]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
+              Report Archive
+            </button>
             <button onClick={() => setCurrentTab('config')}
               className={`text-sm px-4 py-2 ${currentTab === 'config' ? 'text-[#ff004d] border-b-2 border-[#ff004d]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Config
@@ -594,6 +599,7 @@ export default function App() {
             </div>
           )}
 
+          {currentTab === 'reports' && <ReportArchive />}
           {currentTab === 'config' && <ConfigTab onReindex={triggerReindex} />}
           <footer className="mt-10 pt-5 border-t border-[#1a1a1a] flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 text-[12px] text-[#444444]">
