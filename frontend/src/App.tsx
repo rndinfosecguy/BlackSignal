@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { sourceColor, renderMarkdown } from './lib/utils'
+import { checkSession, logout } from './lib/auth'
 import SearchBar from './components/SearchBar'
 import FilterChips from './components/FilterChips'
 import PasteCard from './components/PasteCard'
@@ -8,12 +9,70 @@ import StatsDashboard from './components/StatsDashboard'
 import Pagination from './components/Pagination'
 import ConfigTab from './components/ConfigTab'
 import ReportArchive from './components/ReportArchive'
+import LoginScreen from './components/LoginScreen'
 import { usePastes } from './hooks/usePastes'
 import type { FilterState } from './hooks/usePastes'
 
 type Overrides = Partial<FilterState>
 
+type AuthState = 'checking' | 'authenticated' | 'unauthenticated'
+
 export default function App() {
+  const [authState, setAuthState] = useState<AuthState>('checking')
+  const [username, setUsername] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    checkSession().then(s => {
+      if (cancelled) return
+      setUsername(s.username || '')
+      setAuthState(s.authenticated ? 'authenticated' : 'unauthenticated')
+    })
+    const onExpired = () => setAuthState('unauthenticated')
+    window.addEventListener('bs-auth-expired', onExpired)
+    return () => {
+      cancelled = true
+      window.removeEventListener('bs-auth-expired', onExpired)
+    }
+  }, [])
+
+  if (authState === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-transparent border-t-[#ff004d] border-r-[#ff004d]/60 animate-spin" />
+      </div>
+    )
+  }
+
+  if (authState === 'unauthenticated') {
+    return (
+      <LoginScreen
+        onLogin={user => {
+          setUsername(user)
+          setAuthState('authenticated')
+        }}
+      />
+    )
+  }
+
+  return (
+    <MainApp
+      username={username}
+      onLogout={async () => {
+        await logout()
+        setUsername('')
+        setAuthState('unauthenticated')
+      }}
+    />
+  )
+}
+
+interface MainAppProps {
+  username: string
+  onLogout: () => void
+}
+
+function MainApp({ username, onLogout }: MainAppProps) {
   const {
     pastes, total, page, totalPages, loading, error,
     sources, types, secretTypes, stats, indexStatus, version,
@@ -608,7 +667,13 @@ export default function App() {
               <span className="text-[#555555]">FOR RESEARCH ONLY</span>
               {version && <><span className="text-[#555555]">|</span><span>{version}</span></>}
             </div>
-            
+            <div className="flex items-center gap-3 text-[12px]">
+              {username && <span className="text-[#555555]">{username}</span>}
+              <button onClick={onLogout}
+                className="text-[#555555] hover:text-[#ff004d] transition-all cursor-pointer">
+                Sign out
+              </button>
+            </div>
           </footer>
         </div>
       )}

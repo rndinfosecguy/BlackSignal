@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Python](https://img.shields.io/badge/Python-3.12-blueviolet)
 ![Docker](https://img.shields.io/badge/Docker-ready-0db7ed)
-![Version](https://img.shields.io/badge/version-1.14.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.15.0-brightgreen)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
@@ -38,7 +38,7 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 - **LLM analysis per paste (optional)** —  produces a structured markdown summary with technical and personal findings plus a risk assessment. Requires an OpenRouter API key (see [LLM Integration](#llm-integration-optional)).
 - **LLM batch report (optional)** — analyzes every paste matching the current filters individually, then creates an overall security report..
 - **Report archive** — every LLM analysis (single and batch) is saved under `data/reports/` and listed in the **Report Archive** tab, where reports can be viewed, downloaded, or deleted. They survive restarts. the most recent 100 reports are kept.
-- **HTTP Basic Auth** — htpasswd protection, credentials auto-generated on first boot
+- **Authentication** — credentials auto-generated on first boot and stored in `data/.credentials`. The session cookie persists across refreshes (7 days), and HTTP Basic is available for API clients such as `curl`.
 
 ## Tech Stack
 
@@ -47,7 +47,7 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 | Backend | Python, FastAPI, uvicorn |
 | Database | SQLite 3 + FTS5 (full-text) |
 | Frontend | React, Vite, Tailwind CSS v4, highlight.js |
-| Reverse proxy / auth | nginx + htpasswd |
+| Reverse proxy / auth | nginx + app-level auth (cookie session / HTTP Basic) |
 | LLM (optional) | OpenRouter API (`meta-llama/llama-3.1-8b-instruct`) |
 | Runtime | Docker / docker-compose |
 
@@ -63,7 +63,6 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
                                     │ /api
                     ┌───────────────▼───────────────┐
                     │  nginx (port 80)              │
-                    │  - htpasswd auth              │
                     │  - serves React SPA           │
                     │  - gzip + proxy to backend    │
                     └───────────────┬───────────────┘
@@ -93,7 +92,7 @@ BlackSignal/
 │   └── public/bs_logo.png
 ├── raw_pastes/          # Paste data (one subdir per source, gitignored contents)
 ├── data/                # Runtime DB, credentials, openrouter.json, reports/ (created by the app when needed)
-├── nginx/default.conf   # Reverse proxy + htpasswd + gzip
+├── nginx/default.conf   # Reverse proxy + gzip + security headers
 ├── docker-entrypoint.sh # Generates auth creds, starts nginx + backend
 ├── Dockerfile           # Multi-stage build (node → python)
 ├── setup.sh             # One-command Docker + Compose installer
@@ -199,8 +198,11 @@ The LLM features are **disabled by default** and entirely opt-in — without an 
 | POST | `/api/indexer-info` | Update auto-index interval. Body: `{ "interval_seconds": N }` (minimum 3600) |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
 | GET | `/api/db-stats` | Database stats: `{ db_size_bytes, paste_count, raw_pastes_size_bytes, raw_files_total, indexable_files_count }` — `indexable_files_count` mirrors the indexer walk; `raw_files_total` is recursive |
-| GET | `/api/version` | App version: `{ version: "1.14.0" }` |
+| GET | `/api/version` | App version: `{ version: "1.15.0" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
+| POST | `/api/auth/login` | Sign in. Body: `{ "username": "...", "password": "..." }` — sets the session cookie |
+| GET | `/api/auth/session` | Session state: `{ authenticated: bool, username }` |
+| POST | `/api/auth/logout` | Clear the session cookie |
 | GET | `/api/llm/config` | Whether LLM features are enabled: `{ configured: true\|false }` |
 | GET | `/api/llm/key` | Masked key preview: `{ key_preview: "sk-or-v1-...abcd" }` (empty if unset) |
 | POST | `/api/llm/key` | Set the OpenRouter key. Body: `{ "key": "sk-or-v1-..." }` |

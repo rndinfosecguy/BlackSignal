@@ -6,6 +6,36 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.15.0] — 2026-11-25
+
+### Added
+- **In-app login screen and session authentication.** The browser Basic-Auth popup is
+  gone: users sign in on a styled page in the app theme, and the session is kept in a
+  signed, `HttpOnly`, `SameSite=Lax` cookie that survives refreshes and restarts until it
+  expires (default 7 days, `AUTH_SESSION_DAYS`).
+- **App-level auth enforcement.** Every `/api/` route now requires a valid session cookie
+  or HTTP Basic credentials, regardless of the reverse proxy. `curl -u user:pass` keeps
+  working for API clients (validated by the backend).
+- **New endpoints:** `POST /api/auth/login`, `GET /api/auth/session`, `POST /api/auth/logout`.
+- **Sign out** action in the footer.
+- **Login throttling** — repeated failed attempts per client IP are temporarily locked out.
+- **New environment variables:** `AUTH_SESSION_DAYS`, `AUTH_COOKIE_SECURE` (set behind TLS),
+  and `AUTH_DISABLED` (tests/dev only).
+
+### Changed
+- Credentials remain generated on first boot into `data/.credentials`; the backend derives
+  a PBKDF2 hash into `data/.auth.json` and a signing secret into `data/.auth_secret`
+  (both mode `600`).
+- nginx no longer challenges or serves `.htpasswd`; Basic-Auth termination moved to the app.
+- `.credentials` is now written with mode `600`.
+
+### Removed
+- **`.htpasswd` generation and `apache2-utils`** — no longer needed now that auth is
+  validated by the backend against the PBKDF2 hash.
+- nginx `auth_basic` configuration.
+
+---
+
 ## [1.14.0] — 2026-11-25
 
 ### Added

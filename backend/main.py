@@ -7,11 +7,12 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from functools import lru_cache
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Query, HTTPException, Body
+from fastapi import FastAPI, Query, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse, Response
+from fastapi.responses import FileResponse, StreamingResponse, Response, JSONResponse
 import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, export_pastes, get_paste_by_id, get_sources, \
@@ -19,6 +20,7 @@ from database import init_db, build_filter_conditions, search_pastes, search_pas
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running, get_scheduler_info, reschedule_interval
 import llm
 import reports
+import auth
 import json as _json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -32,6 +34,7 @@ sys.setswitchinterval(0.001)
 
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 REINDEX_INTERVAL = int(os.environ.get("REINDEX_INTERVAL", "300"))
+AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes")
 
 try:
     # Check multiple locations: repo root (dev) and /app (Docker)
@@ -122,6 +125,12 @@ def clear_cache():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Prepare credential hash + signing secret before serving (idempotent).
+    try:
+        auth.ensure_auth_files()
+    except Exception:
+        logger.exception("Failed to initialise authentication files")
+
     init_db()
 
     # Warm the stats cache in a background thread. Running this directly here
@@ -163,6 +172,117 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Authentication -----------------------------------------------------------
+# Everything under /api/ requires a valid session cookie or HTTP Basic
+# credentials, except the auth endpoints themselves. Non-/api paths (the SPA)
+# stay public so the login screen can load.
+
+_PUBLIC_AUTH_PATHS = frozenset({
+    "/api/auth/login",
+    "/api/auth/session",
+    "/api/auth/logout",
+})
+
+
+def _origin_matches_host(origin: str, host: str) -> bool:
+    """Validate a request ``Origin`` against the ``Host`` header.
+
+    Hostnames must match. If both sides carry a port it must match too, which
+    rejects same-host/different-port origins. When the ``Host`` header has no
+    port (some proxies strip it), we accept on hostname alone so legitimate
+    requests still work.
+    """
+    try:
+        origin_parts = urlsplit(origin)
+        host_parts = urlsplit("//" + host)
+        origin_host = origin_parts.hostname
+        host_name = host_parts.hostname
+        origin_port = origin_parts.port
+        host_port = host_parts.port
+    except ValueError:
+        return False
+    if not origin_host or not host_name:
+        return False
+    if origin_host.lower() != host_name.lower():
+        return False
+    if origin_port is not None and host_port is not None and origin_port != host_port:
+        return False
+    return True
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+
+    # CSRF defence: reject mutating API requests whose Origin host doesn't match
+    # the request host. Same-origin browser requests and non-browser clients
+    # (no Origin header, e.g. curl) are unaffected.
+    if path.startswith("/api/") and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("origin")
+        if origin and not _origin_matches_host(origin, request.headers.get("host", "")):
+            return JSONResponse(status_code=403, content={"detail": "Cross-origin request rejected"})
+
+    if AUTH_DISABLED or not path.startswith("/api/") or path in _PUBLIC_AUTH_PATHS:
+        return await call_next(request)
+
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    user = auth.verify_session_token(token)
+    if not user:
+        user = auth.verify_basic(request.headers.get("authorization"))
+    if not user:
+        # JSON 401 without WWW-Authenticate — never trigger a browser popup.
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
+
+@app.post("/api/auth/login")
+def api_auth_login(request: Request, body: dict = Body(...)):
+    ip = request.client.host if request.client else "unknown"
+    if auth.is_rate_limited(ip):
+        raise HTTPException(status_code=429, detail="Too many failed attempts — try again later")
+
+    username = str(body.get("username") or "").strip()
+    password = str(body.get("password") or "")
+    user = auth.verify_credentials(username, password)
+    if not user:
+        auth.register_failure(ip)
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    auth.reset_failures(ip)
+
+    token = auth.create_session_token(user)
+    resp = JSONResponse({"ok": True, "username": user})
+    resp.set_cookie(
+        auth.SESSION_COOKIE,
+        token,
+        max_age=auth.session_days() * 86400,
+        httponly=True,
+        samesite="lax",
+        secure=auth.cookie_secure(),
+        path="/",
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.get("/api/auth/session")
+def api_auth_session(request: Request):
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    user = auth.verify_session_token(token)
+    if not user:
+        user = auth.verify_basic(request.headers.get("authorization"))
+    return JSONResponse(
+        {"authenticated": bool(user), "username": user},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/auth/logout")
+def api_auth_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return resp
 
 
 @app.get("/api/stats")
