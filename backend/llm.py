@@ -1,30 +1,18 @@
 """OpenRouter LLM integration for paste summarization.
 
-Reads configuration from ``openrouter.json`` in the data directory.
-Exposes ``is_configured()`` and ``summarize_paste()``.
+Configuration (API key) lives in ``data/settings.json`` via the settings
+module. Exposes ``is_configured()`` and ``summarize_paste()``.
 """
 
 import json
 import logging
-import os
 import threading
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
+import settings
+
 logger = logging.getLogger("blacksignal")
-
-OPENROUTER_CONFIG_PATH = os.environ.get(
-    "OPENROUTER_CONFIG_PATH",
-    "/app/data/openrouter.json",
-)
-
-# Dev fallback: look for openrouter.json next to the backend dir
-CONFIG_DEV_FALLBACK = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..",
-    "data",
-    "openrouter.json",
-)
 
 OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "meta-llama/llama-3.1-8b-instruct"
@@ -114,6 +102,23 @@ def _set_report_running(total: int) -> None:
         _report_progress.update(running=True, current=0, total=total, phase="analyzing", final_report=None, error=None, cancelled=False, _per_paste_files=None)
 
 
+def begin_report() -> bool:
+    """Atomically claim the report slot before doing any expensive work.
+
+    Returns False if a report is already running. This closes the check-then-act
+    race in the HTTP handler, which spends time counting/fetching before it
+    spawns the worker thread.
+    """
+    with _report_progress_lock:
+        if _report_progress["running"]:
+            return False
+        _report_progress.update(
+            running=True, current=0, total=0, phase="preparing",
+            final_report=None, error=None, cancelled=False, _per_paste_files=None,
+        )
+        return True
+
+
 def _set_report_progress(current: int, phase: str = "") -> None:
     with _report_progress_lock:
         _report_progress["current"] = current
@@ -149,103 +154,24 @@ def is_report_cancelled() -> bool:
         return _report_progress.get("cancelled", False)
 
 
-def _find_config() -> str | None:
-    """Return the path to an existing openrouter.json, or None.
-
-    If OPENROUTER_CONFIG_PATH is explicitly set in the environment, use it
-    exclusively. Otherwise fall back to known locations. This ensures tests
-    can isolate via env var without interference from real config files.
-    """
-    env_val = os.environ.get("OPENROUTER_CONFIG_PATH")
-    if env_val is not None:
-        # Explicitly set — use it even if it doesn't exist (caller gets None)
-        if os.path.exists(env_val):
-            return env_val
-        return None
-
-    # No explicit env var — try fallback paths
-    if os.path.exists(CONFIG_DEV_FALLBACK):
-        return CONFIG_DEV_FALLBACK
-    cwd = os.path.join(os.getcwd(), "data", "openrouter.json")
-    if os.path.exists(cwd):
-        return cwd
-    return None
-
-
-def _load_config() -> dict | None:
-    """Load the OpenRouter config file. Returns None on any failure."""
-    path = _find_config()
-    if not path:
-        return None
-    try:
-        with open(path) as f:
-            cfg = json.load(f)
-        if not isinstance(cfg, dict):
-            logger.warning("openrouter.json is not a JSON object")
-            return None
-        return cfg
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning("Failed to read openrouter.json: %s", e)
-        return None
-
-
 def is_configured() -> bool:
-    """Check whether an OpenRouter API key is available in the config."""
-    cfg = _load_config()
-    if not cfg:
-        return False
-    key = cfg.get("openrouter_key", "").strip()
-    return bool(key)
-
-
-def _get_write_path() -> str:
-    """Return the path where openrouter.json should be saved.
-
-    Uses the env var if set, otherwise the dev fallback, otherwise the
-    CWD-based path. Ensures the parent directory exists.
-    """
-    env_val = os.environ.get("OPENROUTER_CONFIG_PATH")
-    if env_val is not None:
-        path = env_val
-    elif os.path.exists(CONFIG_DEV_FALLBACK):
-        path = CONFIG_DEV_FALLBACK
-    else:
-        path = os.path.join(os.getcwd(), "data", "openrouter.json")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    return path
+    """Check whether an OpenRouter API key is configured."""
+    return bool(settings.get_openrouter_key())
 
 
 def save_key(key: str) -> None:
-    """Save an OpenRouter API key to the config file.
-
-    Clears any cached config state so the next call to is_configured()
-    reflects the new value.
-    """
-    path = _get_write_path()
-    with open(path, "w") as f:
-        json.dump({"openrouter_key": key.strip()}, f)
-    logger.info("OpenRouter config saved to %s", path)
+    """Store the OpenRouter API key in ``data/settings.json``."""
+    settings.set_openrouter_key(key)
 
 
 def remove_key() -> None:
-    """Remove the OpenRouter API key from the config file."""
-    path = _get_write_path()
-    with open(path, "w") as f:
-        json.dump({"openrouter_key": ""}, f)
-    logger.info("OpenRouter key removed from %s", path)
+    """Remove the stored OpenRouter API key."""
+    settings.clear_openrouter_key()
 
 
 def get_key_preview() -> str:
     """Return a masked preview of the configured key, or empty string."""
-    cfg = _load_config()
-    if not cfg:
-        return ""
-    key = cfg.get("openrouter_key", "").strip()
-    if not key or len(key) < 8:
-        return ""
-    prefix = key[:8]
-    suffix = key[-4:]
-    return f"{prefix}...{suffix}"
+    return settings.get_key_preview()
 
 
 def _call_llm(messages: list) -> str:
@@ -255,13 +181,9 @@ def _call_llm(messages: list) -> str:
         ValueError: if OpenRouter is not configured.
         RuntimeError: if the API call fails.
     """
-    cfg = _load_config()
-    if not cfg:
-        raise ValueError("OpenRouter not configured - create data/openrouter.json")
-
-    key = cfg.get("openrouter_key", "").strip()
+    key = settings.get_openrouter_key()
     if not key:
-        raise ValueError("OpenRouter not configured - create data/openrouter.json")
+        raise ValueError("OpenRouter not configured - add a key in the Config tab")
 
     body = json.dumps({
         "model": MODEL,

@@ -1,8 +1,8 @@
 FROM node:22-alpine AS frontend-builder
 
 WORKDIR /build
-COPY frontend/package.json ./
-RUN npm install
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
@@ -30,5 +30,8 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz', timeout=4)" || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -204,7 +204,7 @@ export default function PasteDetail({ id, onClose }: Props) {
             {/* LLM Summarize button */}
             <button onClick={handleLlmSummarize} disabled={llmLoading || !llmConfigured}
               className="text-xs px-3 py-1.5 rounded-md border border-[#ff004d]/40 text-[#ff004d] hover:bg-[#ff004d]/10 hover:border-[#ff004d] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              title={!llmConfigured ? 'Set up data/openrouter.json with your OpenRouter API key to enable' : 'Analyze this paste with LLM'}>
+              title={!llmConfigured ? 'Add an OpenRouter API key in the Config tab to enable' : 'Analyze this paste with LLM'}>
               {llmLoading ? (
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-3 h-3 rounded-full border-2 border-transparent border-t-[#ff004d] border-r-[#ff004d]/60 animate-spin" />

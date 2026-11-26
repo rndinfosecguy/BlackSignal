@@ -7,20 +7,21 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from fastapi import FastAPI, Query, HTTPException, Body, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse, Response, JSONResponse
 import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, export_pastes, get_paste_by_id, get_sources, \
-    get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data, DB_PATH, count_pastes
+    get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data, DB_PATH, count_pastes, \
+    QueryError, validate_fts
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running, get_scheduler_info, reschedule_interval
 import llm
 import reports
 import auth
+import settings
 import json as _json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -68,6 +69,29 @@ def normalize_fts_query(q: str) -> str | None:
     if not any(c in query for c in ('*', '"', '(', ')')):
         query = f'"{query}"'
     return query
+
+
+_CSV_INJECTION_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
+
+def _csv_safe(value):
+    """Neutralise spreadsheet formula injection in a CSV cell.
+
+    Pastes are attacker-controlled; a cell starting with ``=``/``+``/``-``/``@``
+    can execute as a formula when opened in Excel/LibreOffice."""
+    if isinstance(value, str) and value.startswith(_CSV_INJECTION_PREFIXES):
+        return "'" + value
+    return value
+
+
+def _static_path(root: str, full_path: str) -> str | None:
+    """Resolve a static file path, returning None if it escapes ``root``."""
+    real_root = os.path.realpath(root)
+    # Defensively decode too: some proxies pass percent-encoded segments through.
+    target = os.path.realpath(os.path.join(real_root, unquote(full_path)))
+    if target != real_root and not target.startswith(real_root + os.sep):
+        return None
+    return target
 
 
 # --- Cached data accessors -------------------------------------------------
@@ -125,11 +149,17 @@ def clear_cache():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if AUTH_DISABLED:
+        logger.warning("AUTH_DISABLED is set — API authentication is DISABLED. Do not use in production.")
+
     # Prepare credential hash + signing secret before serving (idempotent).
     try:
         auth.ensure_auth_files()
     except Exception:
         logger.exception("Failed to initialise authentication files")
+
+    # Import a legacy data/openrouter.json into settings.json (one-time).
+    settings.migrate_legacy_openrouter()
 
     init_db()
 
@@ -151,7 +181,7 @@ async def lifespan(app: FastAPI):
     threading.Thread(target=_warm_stats, daemon=True).start()
 
     threading.Thread(target=index_all_pastes, daemon=True).start()
-    start_scheduler(REINDEX_INTERVAL)
+    start_scheduler(settings.get_interval(REINDEX_INTERVAL))
     yield
 
 
@@ -165,24 +195,19 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 # --- Authentication -----------------------------------------------------------
 # Everything under /api/ requires a valid session cookie or HTTP Basic
-# credentials, except the auth endpoints themselves. Non-/api paths (the SPA)
-# stay public so the login screen can load.
+# credentials, except the auth endpoints and the health probe. Non-/api paths
+# (the SPA) stay public so the login screen can load.
+#
+# There is intentionally no CORS middleware: the SPA and API are same-origin.
 
 _PUBLIC_AUTH_PATHS = frozenset({
     "/api/auth/login",
     "/api/auth/session",
     "/api/auth/logout",
+    "/api/healthz",
 })
 
 
@@ -235,6 +260,12 @@ async def auth_middleware(request: Request, call_next):
         # JSON 401 without WWW-Authenticate — never trigger a browser popup.
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     return await call_next(request)
+
+
+@app.get("/api/healthz")
+def api_healthz():
+    """Liveness probe — public, no database access."""
+    return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/auth/login")
@@ -295,15 +326,18 @@ def api_stats(
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
-    return _get_stats_cached(
-        normalize_fts_query(q),
-        tuple(source) if source else None,
-        tuple(content_type) if content_type else None,
-        _parse_bool(has_secrets),
-        tuple(secret_type),
-        date_from,
-        date_to,
-    )
+    try:
+        return _get_stats_cached(
+            normalize_fts_query(q),
+            tuple(source) if source else None,
+            tuple(content_type) if content_type else None,
+            _parse_bool(has_secrets),
+            tuple(secret_type),
+            date_from,
+            date_to,
+        )
+    except QueryError:
+        raise HTTPException(status_code=400, detail="Invalid search query")
 
 
 @app.get("/api/sources")
@@ -341,28 +375,31 @@ def api_search(
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
-    if group_by:
-        return search_pastes_grouped(
-            group_by=group_by,
+    try:
+        if group_by:
+            return search_pastes_grouped(
+                group_by=group_by,
+                query=normalize_fts_query(q),
+                source=source or None,
+                content_type=content_type or None,
+                has_secrets=_parse_bool(has_secrets),
+                secret_types=secret_type if secret_type else None,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        return search_pastes(
             query=normalize_fts_query(q),
             source=source or None,
             content_type=content_type or None,
             has_secrets=_parse_bool(has_secrets),
             secret_types=secret_type if secret_type else None,
+            page=page,
+            per_page=per_page,
             date_from=date_from,
             date_to=date_to,
         )
-    return search_pastes(
-        query=normalize_fts_query(q),
-        source=source or None,
-        content_type=content_type or None,
-        has_secrets=_parse_bool(has_secrets),
-        secret_types=secret_type if secret_type else None,
-        page=page,
-        per_page=per_page,
-        date_from=date_from,
-        date_to=date_to,
-    )
+    except QueryError:
+        raise HTTPException(status_code=400, detail="Invalid search query")
 
 
 @app.get("/api/pastes/export")
@@ -384,17 +421,27 @@ def api_pastes_export(
     inc_content = _parse_bool(include_content)
     secret_types = secret_type if secret_type else None
 
-    rows = list(export_pastes(query=query, source=source or None, content_type=content_type or None,
-                              has_secrets=has_sec, secret_types=secret_types,
-                              include_content=inc_content,
-                              date_from=date_from, date_to=date_to))
+    # Validate the FTS expression up-front so a malformed query returns 400
+    # instead of aborting a partially-streamed response.
+    if query:
+        try:
+            validate_fts(query)
+        except QueryError:
+            raise HTTPException(status_code=400, detail="Invalid search query")
+
+    rows = export_pastes(query=query, source=source or None, content_type=content_type or None,
+                         has_secrets=has_sec, secret_types=secret_types,
+                         include_content=inc_content,
+                         date_from=date_from, date_to=date_to)
 
     if format == "json":
         def json_stream():
             yield "[\n"
-            for i, row in enumerate(rows):
-                if i > 0:
+            first = True
+            for row in rows:
+                if not first:
                     yield ",\n"
+                first = False
                 row["has_passwords"] = bool(row["has_passwords"])
                 row["has_secrets"] = bool(row["has_secrets"])
                 # Include full secrets_detail (already parsed as Python list)
@@ -435,12 +482,16 @@ def api_pastes_export(
             for row in rows:
                 output = io.StringIO()
                 writer = csv.writer(output)
-                vals = [row["id"], row["filename"], row["source"], row["content_type"],
-                        row["size"], int(row["has_passwords"]), int(row["has_secrets"]),
-                        ",".join(row["secret_types"]),
-                        row["first_seen"], _fmt_sd(row.get("secrets_detail"))]
+                vals = [
+                    _csv_safe(row["id"]), _csv_safe(row["filename"]),
+                    _csv_safe(row["source"]), _csv_safe(row["content_type"]),
+                    row["size"], int(row["has_passwords"]), int(row["has_secrets"]),
+                    _csv_safe(",".join(row["secret_types"])),
+                    _csv_safe(row["first_seen"]),
+                    _csv_safe(_fmt_sd(row.get("secrets_detail"))),
+                ]
                 if inc_content:
-                    vals.append(row.get("content", ""))
+                    vals.append(_csv_safe(row.get("content", "")))
                 writer.writerow(vals)
                 yield output.getvalue()
 
@@ -486,6 +537,7 @@ def api_indexer_info_set(body: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Interval must be at least 3600 seconds (1 hour)")
     try:
         reschedule_interval(interval)
+        settings.set_interval(interval)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return get_scheduler_info()
@@ -625,23 +677,24 @@ def api_llm_report(
 ):
     if not llm.is_configured():
         raise HTTPException(status_code=400, detail="OpenRouter not configured")
-    if llm.get_report_progress().get("running"):
-        raise HTTPException(status_code=409, detail="A report is already in progress")
 
     # Count first — cheap COUNT with no row content — so an unfiltered run over a
     # large database fails fast instead of materializing every paste into memory.
     query_norm = normalize_fts_query(q)
     has_sec = _parse_bool(has_secrets)
     secret_types = secret_type if secret_type else None
-    total = count_pastes(
-        query=query_norm,
-        source=source or None,
-        content_type=content_type or None,
-        has_secrets=has_sec,
-        secret_types=secret_types,
-        date_from=date_from,
-        date_to=date_to,
-    )
+    try:
+        total = count_pastes(
+            query=query_norm,
+            source=source or None,
+            content_type=content_type or None,
+            has_secrets=has_sec,
+            secret_types=secret_types,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except QueryError:
+        raise HTTPException(status_code=400, detail="Invalid search query")
     if total == 0:
         return {"status": "done", "report": "No pastes matched the current filters."}
     if total > MAX_REPORT_PASTES:
@@ -650,22 +703,36 @@ def api_llm_report(
             detail=f"{total} pastes match — narrow your filters (max {MAX_REPORT_PASTES})",
         )
 
-    # Metadata + secrets only (no content) and hard-capped at the limit. Full paste
-    # content is fetched lazily per paste inside the worker thread so we never hold
-    # every paste body in memory at once.
-    rows = list(export_pastes(
-        query=query_norm,
-        source=source or None,
-        content_type=content_type or None,
-        has_secrets=has_sec,
-        secret_types=secret_types,
-        include_content=False,
-        date_from=date_from,
-        date_to=date_to,
-        limit=MAX_REPORT_PASTES,
-    ))
+    # Claim the run atomically before any expensive work. Without this, two
+    # concurrent requests could both pass the check and start two paid runs.
+    if not llm.begin_report():
+        raise HTTPException(status_code=409, detail="A report is already in progress")
+
+    try:
+        # Metadata + secrets only (no content) and hard-capped at the limit. Full
+        # paste content is fetched lazily per paste inside the worker thread so we
+        # never hold every paste body in memory at once.
+        rows = list(export_pastes(
+            query=query_norm,
+            source=source or None,
+            content_type=content_type or None,
+            has_secrets=has_sec,
+            secret_types=secret_types,
+            include_content=False,
+            date_from=date_from,
+            date_to=date_to,
+            limit=MAX_REPORT_PASTES,
+        ))
+    except QueryError:
+        llm.reset_report_progress()
+        raise HTTPException(status_code=400, detail="Invalid search query")
+    except Exception:
+        llm.reset_report_progress()
+        raise
+
     total = len(rows)
     if total == 0:
+        llm.reset_report_progress()
         return {"status": "done", "report": "No pastes matched the current filters."}
 
     def _generate():
@@ -965,10 +1032,12 @@ if STATIC_DIR and os.path.exists(STATIC_DIR):
     def serve_spa(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404)
-        filepath = os.path.join(STATIC_DIR, full_path)
-        if os.path.exists(filepath) and os.path.isfile(filepath):
+        filepath = _static_path(STATIC_DIR, full_path)
+        if filepath is None:
+            raise HTTPException(status_code=404)
+        if os.path.isfile(filepath):
             return FileResponse(filepath)
-        spa_html = os.path.join(STATIC_DIR, "index.html")
+        spa_html = os.path.join(os.path.realpath(STATIC_DIR), "index.html")
         if os.path.exists(spa_html):
             return FileResponse(spa_html)
         raise HTTPException(status_code=404)

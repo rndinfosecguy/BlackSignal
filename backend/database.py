@@ -9,6 +9,25 @@ DB_PATH = os.environ.get("DB_PATH", "/app/data/pastes.db")
 _local = threading.local()
 
 
+class QueryError(Exception):
+    """Raised when a user-supplied FTS5 query is malformed."""
+
+
+def _is_fts_error(exc: sqlite3.OperationalError) -> bool:
+    msg = str(exc).lower()
+    return "fts5" in msg or "unterminated string" in msg or ("syntax" in msg and "match" in msg)
+
+
+def _execute(conn: sqlite3.Connection, sql: str, params):
+    """Execute a statement, mapping malformed-FTS errors to QueryError."""
+    try:
+        return conn.execute(sql, params)
+    except sqlite3.OperationalError as e:
+        if _is_fts_error(e):
+            raise QueryError("Invalid search query") from e
+        raise
+
+
 def get_conn():
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = sqlite3.connect(DB_PATH, timeout=15)
@@ -198,7 +217,7 @@ def search_pastes_grouped(group_by, query=None, source=None, content_type=None,
 
     # Get top 10 groups by count
     group_sql = f"SELECT {col_expr} AS key, COUNT(*) AS cnt FROM pastes p WHERE {where} GROUP BY key ORDER BY cnt DESC LIMIT 10"
-    groups = conn.execute(group_sql, params).fetchall()
+    groups = _execute(conn, group_sql, params).fetchall()
 
     total = sum(g["cnt"] for g in groups)
     result_groups = []
@@ -216,7 +235,7 @@ def search_pastes_grouped(group_by, query=None, source=None, content_type=None,
 
     for g in groups:
         key = g["key"]
-        rows = conn.execute(data_sql, params + [key, per_group]).fetchall()
+        rows = _execute(conn, data_sql, params + [key, per_group]).fetchall()
         items = []
         for row in rows:
             d = dict(row)
@@ -245,7 +264,7 @@ def search_pastes(query=None, source=None, content_type=None,
     offset = (page - 1) * per_page
 
     count_sql = f"SELECT COUNT(*) FROM pastes p WHERE {where}"
-    total = conn.execute(count_sql, params).fetchone()[0]
+    total = _execute(conn, count_sql, params).fetchone()[0]
 
     data_sql = f"""
         SELECT p.id, p.filename, p.source, p.content_type, p.size,
@@ -257,7 +276,7 @@ def search_pastes(query=None, source=None, content_type=None,
         ORDER BY p.first_seen DESC
         LIMIT ? OFFSET ?
     """
-    rows = conn.execute(data_sql, params + [per_page, offset]).fetchall()
+    rows = _execute(conn, data_sql, params + [per_page, offset]).fetchall()
 
     results = []
     for row in rows:
@@ -287,7 +306,13 @@ def count_pastes(query=None, source=None, content_type=None,
         date_from=date_from, date_to=date_to,
     )
     where = " AND ".join(conditions) if conditions else "1=1"
-    return conn.execute(f"SELECT COUNT(*) FROM pastes p WHERE {where}", params).fetchone()[0]
+    return _execute(conn, f"SELECT COUNT(*) FROM pastes p WHERE {where}", params).fetchone()[0]
+
+
+def validate_fts(query: str) -> None:
+    """Raise QueryError if the FTS5 expression is malformed (cheap probe)."""
+    conn = get_conn()
+    _execute(conn, "SELECT 1 FROM pastes_fts WHERE pastes_fts MATCH ? LIMIT 1", (query,))
 
 
 def export_pastes(query=None, source=None, content_type=None,
@@ -317,8 +342,8 @@ def export_pastes(query=None, source=None, content_type=None,
         ORDER BY p.first_seen DESC{limit_sql}
     """
     import json
-    rows = conn.execute(data_sql, params).fetchall()
-    for row in rows:
+    cursor = _execute(conn, data_sql, params)
+    for row in cursor:
         d = dict(row)
         st = d.get("secret_types") or ""
         d["secret_types"] = [x for x in st.split(",") if x] if st else []
@@ -415,7 +440,7 @@ def get_stats_filtered(conditions, params):
     conn = get_conn()
     where = " AND ".join(conditions) if conditions else "1=1"
 
-    row = conn.execute(f"""
+    row = _execute(conn, f"""
         SELECT COUNT(*) as total,
                COALESCE(SUM(CASE WHEN has_secrets=1 THEN 1 ELSE 0 END), 0) as with_secrets,
                COALESCE(SUM(CASE WHEN has_passwords=1 THEN 1 ELSE 0 END), 0) as with_passwords,

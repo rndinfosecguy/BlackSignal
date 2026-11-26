@@ -20,6 +20,8 @@ import threading
 import time
 from datetime import datetime, timezone
 
+from paths import data_dir
+
 logger = logging.getLogger("blacksignal")
 
 SESSION_COOKIE = "bs_session"
@@ -44,26 +46,6 @@ def session_days() -> int:
 
 def cookie_secure() -> bool:
     return os.environ.get("AUTH_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
-
-
-def data_dir() -> str:
-    """Resolve the directory holding credentials and auth state."""
-    env = os.environ.get("AUTH_DIR")
-    if env:
-        return env
-    env = os.environ.get("DATA_DIR")
-    if env:
-        return env
-    db = os.environ.get("DB_PATH")
-    if db and db not in (":memory:",):
-        parent = os.path.dirname(os.path.abspath(db))
-        if parent:
-            return parent
-    dev = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
-    dev = os.path.abspath(dev)
-    if os.path.isdir(dev):
-        return dev
-    return "/app/data"
 
 
 def _path(name: str) -> str:

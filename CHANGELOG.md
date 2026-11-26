@@ -6,6 +6,53 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.15.2] — 2026-11-26
+
+### Changed
+- **Single settings store.** `data/settings.json` now holds both the auto-index
+  interval and the OpenRouter API key; `data/openrouter.json` is no longer used.
+  The file is written atomically with mode `0600` (it may contain a secret) and
+  read-modify-write updates are serialised so interval/key saves can't clobber
+  each other.
+- **Automatic migration:** on startup, a legacy `data/openrouter.json` key is
+  imported into settings and the old file is renamed to `openrouter.json.migrated`.
+  Existing configs need no manual action.
+- The key is no longer read through its own path-discovery logic; settings use the
+  shared data-directory resolver.
+
+### Fixed
+- `openrouter.json` was previously written world-readable (`0644`); the merged
+  store is always `0600`.
+
+---
+
+## [1.15.1] — 2026-11-26
+
+### Security
+- **CORS removed.** The API reflected any origin with credentials enabled, letting any
+  website read paste data using the visitor's session. The app is same-origin only now.
+- **CSV export formula injection fixed.** Cells starting with `=`, `+`, `-`, `@`, tab or CR
+  are prefixed with `'` so spreadsheet apps don't execute paste content as formulas.
+- **Malformed FTS5 queries return 400** instead of a 500 (`q=test"`, `q=(unclosed`).
+- **SPA fallback path traversal hardened** — resolved paths must stay inside the static root.
+- **Container hardening:** `no-new-privileges` in compose (the container still runs as
+  root by design; non-root is deferred to a future release).
+
+### Fixed
+- **Auto-index interval is persisted** to `data/settings.json`, so a user-set interval
+  survives restarts instead of silently reverting to the `REINDEX_INTERVAL` env default.
+- **LLM report start is atomic** — two rapid requests can no longer start two concurrent
+  (paid) runs; the second gets `409`.
+- **Exports stream** instead of materializing every matching row in memory, making
+  `include_content=true` safe on large databases.
+
+### Added
+- `GET /api/healthz` (public) and a Docker `HEALTHCHECK`.
+- `frontend/package-lock.json`; the image now builds with `npm ci` for reproducible,
+  auditable frontend dependencies.
+
+---
+
 ## [1.15.0] — 2026-11-25
 
 ### Added

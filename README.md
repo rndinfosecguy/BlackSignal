@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Python](https://img.shields.io/badge/Python-3.12-blueviolet)
 ![Docker](https://img.shields.io/badge/Docker-ready-0db7ed)
-![Version](https://img.shields.io/badge/version-1.15.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.15.2-brightgreen)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** - leaked credentials, API keys, private keys, connection strings and more.
@@ -91,7 +91,7 @@ BlackSignal/
 │   │   └── styles/          # Tailwind v4 + dark hacker theme
 │   └── public/bs_logo.png
 ├── raw_pastes/          # Paste data (one subdir per source, gitignored contents)
-├── data/                # Runtime DB, credentials, openrouter.json, reports/ (created by the app when needed)
+├── data/                # Runtime DB, credentials, settings, reports/ (created by the app when needed)
 ├── nginx/default.conf   # Reverse proxy + gzip + security headers
 ├── docker-entrypoint.sh # Generates auth creds, starts nginx + backend
 ├── Dockerfile           # Multi-stage build (node → python)
@@ -159,13 +159,15 @@ The LLM features are **disabled by default** and entirely opt-in - without an AP
 ### Enable
 
 1. Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys).
-2. Either add it in the **Config** tab of the web UI, or create `data/openrouter.json`:
+2. Add it in the **Config** tab of the web UI, or edit `data/settings.json`:
 
 ```json
 {
   "openrouter_key": "sk-or-v1-..."
 }
 ```
+
+Settings live in `data/settings.json` (file mode `0600` - treat it like a secret). Older installs that still have `data/openrouter.json` are migrated automatically on startup (the old file is renamed to `openrouter.json.migrated`).
 
 ### Usage
 
@@ -181,6 +183,8 @@ The LLM features are **disabled by default** and entirely opt-in - without an AP
 
 ## API Documentation
 
+The API is same-origin only - there is no CORS support. Browsers must reach it through the same host/port as the SPA (or a reverse proxy); `curl` and other non-browser clients are unaffected.
+
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/openapi.json` | Raw OpenAPI schema (machine-readable) |
@@ -194,15 +198,16 @@ The LLM features are **disabled by default** and entirely opt-in - without an AP
 | GET | `/api/types` | Content-type distribution. Optional: `?source=` |
 | GET | `/api/secret-types` | Detected secret categories with counts. Optional: `?source=`, `?content_type=` |
 | GET | `/api/index-status` | Indexer progress: `{ running, current, total, phase }` |
-| GET | `/api/indexer-info` | Scheduler info: `{ interval_seconds, next_run, running }` |
+| GET | `/api/indexer-info` | Scheduler info: `{ interval_seconds, next_run, running }`. The interval is persisted in `data/settings.json` and survives restarts. |
 | POST | `/api/indexer-info` | Update auto-index interval. Body: `{ "interval_seconds": N }` (minimum 3600) |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
 | GET | `/api/db-stats` | Database stats: `{ db_size_bytes, paste_count, raw_pastes_size_bytes, raw_files_total, indexable_files_count }` - `indexable_files_count` mirrors the indexer walk; `raw_files_total` is recursive |
-| GET | `/api/version` | App version: `{ version: "1.15.0" }` |
+| GET | `/api/version` | App version: `{ version: "1.15.2" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
 | POST | `/api/auth/login` | Sign in. Body: `{ "username": "...", "password": "..." }` - sets the session cookie |
 | GET | `/api/auth/session` | Session state: `{ authenticated: bool, username }` |
 | POST | `/api/auth/logout` | Clear the session cookie |
+| GET | `/api/healthz` | Liveness probe (public): `{ status: "ok" }` |
 | GET | `/api/llm/config` | Whether LLM features are enabled: `{ configured: true\|false }` |
 | GET | `/api/llm/key` | Masked key preview: `{ key_preview: "sk-or-v1-...abcd" }` (empty if unset) |
 | POST | `/api/llm/key` | Set the OpenRouter key. Body: `{ "key": "sk-or-v1-..." }` |

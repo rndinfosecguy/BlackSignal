@@ -483,7 +483,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
                   <span className="text-[#333333] text-xs">|</span>
                   <button onClick={handleLlmReport} disabled={llmReportRunning || !llmConfigured}
                     className="text-xs px-3 py-1.5 rounded-md border border-[#ff004d]/40 text-[#ff004d] hover:bg-[#ff004d]/10 hover:border-[#ff004d] transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                    title={!llmConfigured ? 'Set up data/openrouter.json with your OpenRouter API key to enable' : ''}>
+                    title={!llmConfigured ? 'Add an OpenRouter API key in the Config tab to enable' : ''}>
                     {llmReportRunning ? 'Generating...' : 'LLM Report'}
                   </button>
                 </div>
