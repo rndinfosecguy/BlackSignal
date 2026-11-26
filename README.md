@@ -8,7 +8,7 @@
 ![Version](https://img.shields.io/badge/version-1.15.0-brightgreen)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 
-A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** — leaked credentials, API keys, private keys, connection strings and more.
+A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** - leaked credentials, API keys, private keys, connection strings and more.
 
 Best used in combination with my paste scraper project [rndinfosecguy/Scavenger](https://github.com/rndinfosecguy/Scavenger).
 
@@ -24,21 +24,21 @@ Best used in combination with my paste scraper project [rndinfosecguy/Scavenger]
 ### Analyze Pastes
 ![image](assets/example2.jpg)
 
-- **Search & browse** — full-text search (SQLite FTS5) 
-- **Filtering** — by source site, detected content type, sensitive-data categories and technical/personal classification
-- **Sensitive-data detection** — automatic regex/keyword scanning for:
+- **Search & browse** - full-text search (SQLite FTS5) 
+- **Filtering** - by source site, detected content type, sensitive-data categories and technical/personal classification
+- **Sensitive-data detection** - automatic regex/keyword scanning for:
   `email:password`, `credential_assignment`, `private_key`, `aws_key`, `github_token`, `github_pat`, `stripe_key`, `google_api_key`, `jwt_token`, `slack_token`, `discord_token`, `connection_string`, `onion_address`, `auth_header`, `credit_card`, `sql_user_insert`, `mysql_connect`, `wp_config`, `client_secret` + custom search terms via `backend/searchterms.txt`
-- **Personal data detection** — identifies exposed personally identifiable information: `personal_email`, `ssn` (US Social Security Numbers), `passport` (passport numbers), `btc_address` (Bitcoin wallet addresses), `eth_address` (Ethereum wallet addresses), `name_dob` (name + date of birth on the same line)
-- **Detailed paste view** — detected secrets are shown at the top. Whole paste with inline highlighting can be expanded.
-- **Syntax highlighting** — highlight.js for different coding languages
-- **Dashboard** — overview tab showing technical and personal detection rates, source/type distributions, and per-type breakdowns
-- **Comprehensive reindex** — optional full-content scan mode (bypasses size limits) for deep inspection of large files
-- **Periodic re-indexing** — automatic daily scan for new/changed pastes (interval configurable in the Config tab)
+- **Personal data detection** - identifies exposed personally identifiable information: `personal_email`, `ssn` (US Social Security Numbers), `passport` (passport numbers), `btc_address` (Bitcoin wallet addresses), `eth_address` (Ethereum wallet addresses), `name_dob` (name + date of birth on the same line)
+- **Detailed paste view** - detected secrets are shown at the top. Whole paste with inline highlighting can be expanded.
+- **Syntax highlighting** - highlight.js for different coding languages
+- **Dashboard** - overview tab showing technical and personal detection rates, source/type distributions, and per-type breakdowns
+- **Comprehensive reindex** - optional full-content scan mode (bypasses size limits) for deep inspection of large files
+- **Periodic re-indexing** - automatic daily scan for new/changed pastes (interval configurable in the Config tab)
 - **Export findings** - download search results as CSV or JSON with the current filter state
-- **LLM analysis per paste (optional)** —  produces a structured markdown summary with technical and personal findings plus a risk assessment. Requires an OpenRouter API key (see [LLM Integration](#llm-integration-optional)).
-- **LLM batch report (optional)** — analyzes every paste matching the current filters individually, then creates an overall security report..
-- **Report archive** — every LLM analysis (single and batch) is saved under `data/reports/` and listed in the **Report Archive** tab, where reports can be viewed, downloaded, or deleted. They survive restarts. the most recent 100 reports are kept.
-- **Authentication** — credentials auto-generated on first boot and stored in `data/.credentials`. The session cookie persists across refreshes (7 days), and HTTP Basic is available for API clients such as `curl`.
+- **LLM analysis per paste (optional)** -  produces a structured markdown summary with technical and personal findings plus a risk assessment. Requires an OpenRouter API key (see [LLM Integration](#llm-integration-optional)).
+- **LLM batch report (optional)** - analyzes every paste matching the current filters individually, then creates an overall security report..
+- **Report archive** - every LLM analysis (single and batch) is saved under `data/reports/` and listed in the **Report Archive** tab, where reports can be viewed, downloaded, or deleted. They survive restarts. the most recent 100 reports are kept.
+- **Authentication** - credentials auto-generated on first boot and stored in `data/.credentials`. The session cookie persists across refreshes (7 days), and HTTP Basic is available for API clients such as `curl`.
 
 ## Tech Stack
 
@@ -82,11 +82,11 @@ BlackSignal/
 │   ├── llm.py           # OpenRouter integration (per-paste analysis + report aggregation)
 │   ├── reports.py       # Persistent LLM report archive (data/reports/)
 │   ├── scheduler.py     # Periodic re-indexing (APScheduler), threaded pipeline
-│   └── searchterms.txt  # Custom search terms — add terms here & reindex to apply
+│   └── searchterms.txt  # Custom search terms - add terms here & reindex to apply
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx          # Main UI (filter state, indexing overlay, LLM report)
-│   │   ├── hooks/           # usePastes — data fetching, index-status polling
+│   │   ├── hooks/           # usePastes - data fetching, index-status polling
 │   │   ├── components/      # PasteCard, PasteDetail, FilterChips, ConfigTab, …
 │   │   └── styles/          # Tailwind v4 + dark hacker theme
 │   └── public/bs_logo.png
@@ -154,7 +154,7 @@ Visit `http://localhost:9090`
 
 ## LLM Integration (optional)
 
-The LLM features are **disabled by default** and entirely opt-in — without an API key the app behaves exactly as before. When enabled, paste content (first 200 KB per paste) is sent to [OpenRouter](https://openrouter.ai) for analysis. Obviously you need a balance on your [OpenRouter](https://openrouter.ai) account.
+The LLM features are **disabled by default** and entirely opt-in - without an API key the app behaves exactly as before. When enabled, paste content (first 200 KB per paste) is sent to [OpenRouter](https://openrouter.ai) for analysis. Obviously you need a balance on your [OpenRouter](https://openrouter.ai) account.
 
 ### Enable
 
@@ -169,9 +169,9 @@ The LLM features are **disabled by default** and entirely opt-in — without an 
 
 ### Usage
 
-- **Per paste** — open a paste and click **Analyze with LLM** for a structured summary (technical findings, personal findings, risk assessment).
-- **Batch** — apply filters, then click **LLM Report** next to the export buttons. Every visible paste is analyzed individually, results are synthesized into an overall report.
-- **Archive** — every analysis is saved automatically and listed in the **Report Archive** tab.
+- **Per paste** - open a paste and click **Analyze with LLM** for a structured summary (technical findings, personal findings, risk assessment).
+- **Batch** - apply filters, then click **LLM Report** next to the export buttons. Every visible paste is analyzed individually, results are synthesized into an overall report.
+- **Archive** - every analysis is saved automatically and listed in the **Report Archive** tab.
 
 ### Limits
 
@@ -184,8 +184,8 @@ The LLM features are **disabled by default** and entirely opt-in — without an 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/openapi.json` | Raw OpenAPI schema (machine-readable) |
-| GET | `/api/docs` | Swagger UI — interactive API explorer |
-| GET | `/api/redoc` | ReDoc — clean scrollable API docs |
+| GET | `/api/docs` | Swagger UI - interactive API explorer |
+| GET | `/api/redoc` | ReDoc - clean scrollable API docs |
 | GET | `/api/pastes` | Paginated/searchable list. Params: `q`, `source` (repeatable), `content_type` (repeatable), `has_secrets`, `secret_type` (repeatable, OR), `page`, `per_page`, `group_by` (source or content_type), `date_from` (YYYY-MM-DD), `date_to` (YYYY-MM-DD) |
 | GET | `/api/pastes/export` | Export search results as CSV or JSON. Params: same as `/api/pastes` (except `page`, `per_page`) + `format=csv|json` (default csv) + `include_content=true|false` (default false) + `date_from`, `date_to` |
 | GET | `/api/pastes/{id}` | Full paste content + detected secrets |
@@ -197,10 +197,10 @@ The LLM features are **disabled by default** and entirely opt-in — without an 
 | GET | `/api/indexer-info` | Scheduler info: `{ interval_seconds, next_run, running }` |
 | POST | `/api/indexer-info` | Update auto-index interval. Body: `{ "interval_seconds": N }` (minimum 3600) |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
-| GET | `/api/db-stats` | Database stats: `{ db_size_bytes, paste_count, raw_pastes_size_bytes, raw_files_total, indexable_files_count }` — `indexable_files_count` mirrors the indexer walk; `raw_files_total` is recursive |
+| GET | `/api/db-stats` | Database stats: `{ db_size_bytes, paste_count, raw_pastes_size_bytes, raw_files_total, indexable_files_count }` - `indexable_files_count` mirrors the indexer walk; `raw_files_total` is recursive |
 | GET | `/api/version` | App version: `{ version: "1.15.0" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
-| POST | `/api/auth/login` | Sign in. Body: `{ "username": "...", "password": "..." }` — sets the session cookie |
+| POST | `/api/auth/login` | Sign in. Body: `{ "username": "...", "password": "..." }` - sets the session cookie |
 | GET | `/api/auth/session` | Session state: `{ authenticated: bool, username }` |
 | POST | `/api/auth/logout` | Clear the session cookie |
 | GET | `/api/llm/config` | Whether LLM features are enabled: `{ configured: true\|false }` |
@@ -214,7 +214,7 @@ The LLM features are **disabled by default** and entirely opt-in — without an 
 | GET | `/api/llm/report-download` | Backward-compatible alias: newest archived batch report as a ZIP |
 | GET | `/api/reports` | List archived LLM reports: `{ reports: [{ id, type, created_at, title, paste_count? }] }` |
 | GET | `/api/reports/{id}` | One report: `{ meta, markdown }` |
-| GET | `/api/reports/{id}/download` | Download one report — single → `.md`, batch → `.zip` |
+| GET | `/api/reports/{id}/download` | Download one report - single → `.md`, batch → `.zip` |
 | DELETE | `/api/reports/{id}` | Delete an archived report |
 
 Example - export CSV with source and date range:
