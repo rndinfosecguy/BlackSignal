@@ -1,8 +1,10 @@
 import os
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from indexer import walk_pastes, detect_content_type
@@ -25,11 +27,16 @@ _index_progress = {
 }
 
 # Last reindex result — stored by index_all_pastes, read by /api/last-reindex.
+# Always holds the last *successful* run's counts plus attempt/error metadata.
 _last_reindex_result = {}
 
 
 def get_last_reindex_result():
     return dict(_last_reindex_result)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def get_index_progress():
@@ -114,6 +121,11 @@ def index_all_pastes(scan_limit=None, incremental=False):
     if not _index_lock.acquire(blocking=False):
         logger.info("Index already in progress, skipping")
         return
+
+    started = time.monotonic()
+    _last_reindex_result["last_attempt_at"] = _now_iso()
+    _last_reindex_result.pop("last_error", None)
+    _last_reindex_result.pop("last_error_at", None)
 
     try:
         _index_progress.update(running=True, current=0, total=0, phase="scanning")
@@ -306,12 +318,18 @@ def index_all_pastes(scan_limit=None, incremental=False):
         result = {"indexed": indexed_count, "deleted": deleted_count, "total": len(current_ids)}
         _last_reindex_result.update(result)
         _last_reindex_result["skipped"] = skipped_count
+        _last_reindex_result["finished_at"] = _now_iso()
+        _last_reindex_result["duration_seconds"] = round(time.monotonic() - started, 1)
+        _last_reindex_result.pop("last_error", None)
+        _last_reindex_result.pop("last_error_at", None)
 
         _warm_os_cache()
 
         return result
-    except Exception:
+    except Exception as e:
         logger.exception("Indexing failed")
+        _last_reindex_result["last_error"] = str(e) or e.__class__.__name__
+        _last_reindex_result["last_error_at"] = _now_iso()
     finally:
         _index_progress.update(running=False, current=0, total=0, phase="")
         _index_lock.release()

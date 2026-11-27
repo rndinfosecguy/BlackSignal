@@ -15,8 +15,10 @@ fi
 if [ ! -f "$CRED_FILE" ]; then
     AUTH_USER="${AUTH_USER:-admin}"
     AUTH_PASS="${AUTH_PASSWORD:-$(openssl rand -base64 12)}"
+    # URL shown to the operator; override with PUBLIC_URL if the port mapping differs.
+    APP_URL="${PUBLIC_URL:-http://localhost:9090}"
     umask 077
-    echo "URL:     http://localhost" > "$CRED_FILE"
+    echo "URL:     $APP_URL" > "$CRED_FILE"
     echo "Username: $AUTH_USER" >> "$CRED_FILE"
     echo "Password: $AUTH_PASS" >> "$CRED_FILE"
     umask 022
@@ -25,7 +27,7 @@ if [ ! -f "$CRED_FILE" ]; then
     echo "┌${BORDER}┐"
     printf "│  %-42s  │\n" "BlackSignal Web App Credentials"
     printf "│  %-42s  │\n" ""
-    printf "│  %-42s  │\n" "URL:     http://localhost"
+    printf "│  %-42s  │\n" "URL:     $APP_URL"
     printf "│  Username: %-32s  │\n" "$AUTH_USER"
     printf "│  Password: %-32s  │\n" "$AUTH_PASS"
     echo "└${BORDER}┘"

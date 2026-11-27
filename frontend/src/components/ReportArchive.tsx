@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { renderMarkdown } from '../lib/utils'
+import { lockScroll } from '../lib/scrollLock'
 
 interface ReportMeta {
   id: string
@@ -31,6 +32,12 @@ export default function ReportArchive() {
   }
 
   useEffect(() => { load() }, [])
+
+  // Lock background scrolling while the report viewer is open.
+  useEffect(() => {
+    if (!viewing) return
+    return lockScroll()
+  }, [viewing])
 
   const handleView = async (id: string) => {
     try {

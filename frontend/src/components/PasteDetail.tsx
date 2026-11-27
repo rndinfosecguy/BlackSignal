@@ -13,6 +13,7 @@ import c from 'highlight.js/lib/languages/c'
 import markdown_h from 'highlight.js/lib/languages/markdown'
 import { fetchPasteDetail } from '../hooks/usePastes'
 import { formatSize, splitHighlighted, renderMarkdown } from '../lib/utils'
+import { lockScroll } from '../lib/scrollLock'
 
 hljs.registerLanguage('json', json)
 hljs.registerLanguage('xml', xml)
@@ -65,7 +66,6 @@ export default function PasteDetail({ id, onClose }: Props) {
     setFetchError(false)
     setLlmResponse(null)
     setLlmError(null)
-    document.body.style.overflow = 'hidden'
 
     // Fetch paste detail and LLM config in parallel
     Promise.all([
@@ -84,8 +84,10 @@ export default function PasteDetail({ id, onClose }: Props) {
       setLoading(false)
       setFetchError(true)
     })
-    return () => { document.body.style.overflow = '' }
   }, [id])
+
+  // Lock background scrolling while the modal is open.
+  useEffect(() => lockScroll(), [])
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }

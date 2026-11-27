@@ -6,6 +6,36 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.15.3] — 2026-11-27
+
+### Added
+- **Config tab explains the file-count discrepancy.** "Files scanned (last run)" now
+  shows how long ago that run finished, "Indexable files" shows the live delta since
+  the last run (e.g. `+4,069 since last run`), and a failed index run is surfaced in
+  red instead of silently leaving stale numbers in place.
+- `/api/last-reindex` now also returns `finished_at`, `duration_seconds`,
+  `last_attempt_at`, and `last_error` / `last_error_at` when a run fails.
+
+### Changed
+- A failed index run records its error while preserving the last successful run's
+  counts, so the UI can distinguish "indexer is behind" from "indexer is broken".
+
+### Fixed
+- **Background no longer scrolls behind overlays.** The search loading overlay, paste
+  detail, LLM report, report viewer and reindex confirmation now use a reference-counted
+  scroll lock (stacked overlays restore scroll only when the last one closes).
+- **Loading overlay covers the full viewport on wide screens.** The lock now applies to
+  `<html>` as well as `<body>` (a horizontal scrollbar otherwise left an uncovered strip)
+  and compensates for the vertical scrollbar so the page doesn't shift.
+- **Paste cards no longer cause horizontal overflow** — long filenames truncate and
+  unbroken snippets wrap, removing the stray horizontal scrollbar.
+- **Disabled LLM buttons** now say to add the key in the **Config tab** instead of
+  referencing the removed `data/openrouter.json`.
+- **First-boot credentials show the correct URL** (`http://localhost:9090` instead of a
+  port-less `http://localhost`), configurable via `PUBLIC_URL`.
+
+---
+
 ## [1.15.2] — 2026-11-26
 
 ### Changed
@@ -50,6 +80,8 @@ Dates are based on commit timestamps (UTC+1).
 - `GET /api/healthz` (public) and a Docker `HEALTHCHECK`.
 - `frontend/package-lock.json`; the image now builds with `npm ci` for reproducible,
   auditable frontend dependencies.
+- Startup logs a warning when `AUTH_DISABLED` is set, so an unauthenticated deployment
+  is noticeable in the logs.
 
 ---
 
@@ -66,15 +98,21 @@ Dates are based on commit timestamps (UTC+1).
 - **New endpoints:** `POST /api/auth/login`, `GET /api/auth/session`, `POST /api/auth/logout`.
 - **Sign out** action in the footer.
 - **Login throttling** — repeated failed attempts per client IP are temporarily locked out.
+- **Expired or invalidated sessions** automatically return the UI to the login screen.
 - **New environment variables:** `AUTH_SESSION_DAYS`, `AUTH_COOKIE_SECURE` (set behind TLS),
   and `AUTH_DISABLED` (tests/dev only).
+- **CSRF guard for mutating API calls.** `POST`/`PUT`/`PATCH`/`DELETE` requests to `/api/*`
+  that carry an `Origin` header must match the request host (hostname; ports compared when
+  both are present, tolerated when a proxy strips them). Non-browser clients without an
+  `Origin` header, such as `curl`, are unaffected.
 
 ### Changed
 - Credentials remain generated on first boot into `data/.credentials`; the backend derives
   a PBKDF2 hash into `data/.auth.json` and a signing secret into `data/.auth_secret`
   (both mode `600`).
 - nginx no longer challenges or serves `.htpasswd`; Basic-Auth termination moved to the app.
-- `.credentials` is now written with mode `600`.
+- `.credentials` is now written with mode `600`; existing files are tightened to `600`
+  on startup.
 
 ### Removed
 - **`.htpasswd` generation and `apache2-utils`** — no longer needed now that auth is

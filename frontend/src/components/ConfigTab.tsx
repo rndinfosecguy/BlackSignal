@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { lockScroll } from '../lib/scrollLock'
 
 interface DbStats {
   db_size_bytes: number
@@ -19,6 +20,11 @@ interface LastReindex {
   deleted: number
   skipped: number
   total: number
+  finished_at?: string
+  duration_seconds?: number
+  last_attempt_at?: string
+  last_error?: string | null
+  last_error_at?: string
 }
 
 interface Props {
@@ -70,6 +76,12 @@ export default function ConfigTab({ onReindex }: Props) {
     const interval = setInterval(loadIndexer, 15000)
     return () => { cancelled = true; clearInterval(interval) }
   }, [])
+
+  // Lock background scrolling while the reindex confirmation is open.
+  useEffect(() => {
+    if (!confirmReindex) return
+    return lockScroll()
+  }, [confirmReindex])
 
   const handleEdit = () => {
     setEditValue('')
@@ -190,6 +202,18 @@ export default function ConfigTab({ onReindex }: Props) {
     return `${(secs / 3600).toFixed(1)}h`
   }
 
+  const fmtAgo = (iso?: string): string => {
+    if (!iso) return ''
+    const t = new Date(iso).getTime()
+    if (isNaN(t)) return ''
+    const mins = Math.max(0, Math.floor((Date.now() - t) / 60000))
+    if (mins < 1) return 'just now'
+    if (mins < 60) return `${mins}m ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}h ago`
+    return `${Math.floor(hours / 24)}d ago`
+  }
+
   const fmtNextRun = (iso: string | null): string => {
     if (!iso) return 'Unknown'
     const d = new Date(iso)
@@ -273,14 +297,25 @@ export default function ConfigTab({ onReindex }: Props) {
           </div>
           <div>
             <div className="text-xs text-[#555555] mb-1"
-              title="Files discovered under raw_pastes during the last index run. Includes files skipped as too small (<32 bytes), so it can be higher than the number of pastes in the database.">
+              title="Files discovered under raw_pastes during the last successful index run. Includes files skipped as too small (<32 bytes), so it can be higher than the number of pastes in the database.">
               Files scanned (last run)
             </div>
             <div className="text-sm text-[#e8e8e8]">
               {lastReindex ? lastReindex.total.toLocaleString() : '...'}
+              {lastReindex?.finished_at && (
+                <span className="text-[10px] text-[#666666] ml-1.5" title={lastReindex.finished_at}>
+                  &middot; {fmtAgo(lastReindex.finished_at)}
+                </span>
+              )}
             </div>
           </div>
         </div>
+        {lastReindex?.last_error && (
+          <div className="text-xs text-[#ff004d] mt-3 truncate"
+            title={lastReindex.last_error}>
+            Last index run failed{lastReindex.last_error_at ? ` (${fmtAgo(lastReindex.last_error_at)})` : ''}: {lastReindex.last_error}
+          </div>
+        )}
       </div>
 
       {/* Reindex section */}
@@ -390,6 +425,16 @@ export default function ConfigTab({ onReindex }: Props) {
                 Indexable files
               </div>
               <div className="text-sm text-[#e8e8e8]">{dbStats.indexable_files_count.toLocaleString()}</div>
+              {lastReindex && typeof lastReindex.total === 'number' && (() => {
+                const delta = dbStats.indexable_files_count - lastReindex.total
+                if (delta === 0) return null
+                return (
+                  <div className={`text-[10px] mt-0.5 ${delta > 0 ? 'text-[#ffd700]' : 'text-[#777777]'}`}
+                    title="Difference between the live file count and the last index run's scan count.">
+                    {delta > 0 ? '+' : ''}{delta.toLocaleString()} since last run
+                  </div>
+                )
+              })()}
             </div>
             <div>
               <div className="text-xs text-[#555555] mb-1"

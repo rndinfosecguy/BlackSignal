@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { sourceColor, renderMarkdown } from './lib/utils'
 import { checkSession, logout } from './lib/auth'
+import { lockScroll } from './lib/scrollLock'
 import SearchBar from './components/SearchBar'
 import FilterChips from './components/FilterChips'
 import PasteCard from './components/PasteCard'
@@ -132,6 +133,17 @@ function MainApp({ username, onLogout }: MainAppProps) {
     }
     return () => { if (timer) clearTimeout(timer) }
   }, [loading])
+
+  // Prevent background scrolling while an overlay/modal is open.
+  useEffect(() => {
+    if (!showLoadingOverlay) return
+    return lockScroll()
+  }, [showLoadingOverlay])
+
+  useEffect(() => {
+    if (!showLlmReport) return
+    return lockScroll()
+  }, [showLlmReport])
 
   const applyAll = useCallback((overrides: Overrides) => {
     const nextQuery = overrides.q !== undefined ? overrides.q : query

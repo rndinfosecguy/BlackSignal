@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Python](https://img.shields.io/badge/Python-3.12-blueviolet)
 ![Docker](https://img.shields.io/badge/Docker-ready-0db7ed)
-![Version](https://img.shields.io/badge/version-1.15.2-brightgreen)
+![Version](https://img.shields.io/badge/version-1.15.3-brightgreen)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** - leaked credentials, API keys, private keys, connection strings and more.
@@ -148,6 +148,8 @@ environment:
   - AUTH_PASSWORD=your-password
 ```
 
+If you change the published port, also set `PUBLIC_URL` in `docker-compose.yml` (e.g. `http://localhost:8080`) so the first-boot credentials show the correct address.
+
 ### 3. Open
 
 Visit `http://localhost:9090`
@@ -202,8 +204,8 @@ The API is same-origin only - there is no CORS support. Browsers must reach it t
 | POST | `/api/indexer-info` | Update auto-index interval. Body: `{ "interval_seconds": N }` (minimum 3600) |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
 | GET | `/api/db-stats` | Database stats: `{ db_size_bytes, paste_count, raw_pastes_size_bytes, raw_files_total, indexable_files_count }` - `indexable_files_count` mirrors the indexer walk; `raw_files_total` is recursive |
-| GET | `/api/version` | App version: `{ version: "1.15.2" }` |
-| GET | `/api/last-reindex` | Last reindex result: `{ indexed: N, deleted: N, skipped: N }` or `{}` if none |
+| GET | `/api/version` | App version: `{ version: "1.15.3" }` |
+| GET | `/api/last-reindex` | Last reindex result: `{ indexed, deleted, skipped, total, finished_at, duration_seconds, last_attempt_at, last_error? }` or `{}` if none. Counts are from the last **successful** run; failure details are included without discarding them. |
 | POST | `/api/auth/login` | Sign in. Body: `{ "username": "...", "password": "..." }` - sets the session cookie |
 | GET | `/api/auth/session` | Session state: `{ authenticated: bool, username }` |
 | POST | `/api/auth/logout` | Clear the session cookie |

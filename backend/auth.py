@@ -82,8 +82,9 @@ def read_credentials_file() -> tuple[str, str] | None:
 
 
 def _write_credentials_file(username: str, password: str) -> None:
+    url = os.environ.get("PUBLIC_URL", "http://localhost:9090")
     content = (
-        "URL:     http://localhost\n"
+        f"URL:     {url}\n"
         f"Username: {username}\n"
         f"Password: {password}\n"
     )

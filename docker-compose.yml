@@ -13,6 +13,8 @@ services:
       - REINDEX_INTERVAL=86400
       - AUTH_USER=admin
       - AUTH_PASSWORD=
+      # URL shown in the first-boot credentials (update if you change the port mapping)
+      - PUBLIC_URL=http://localhost:9090
       - SEARCH_TERMS_FILE=/app/configs/searchterms.txt
       - INDEX_WORKERS=4
     restart: unless-stopped
