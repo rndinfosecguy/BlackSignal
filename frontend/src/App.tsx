@@ -441,7 +441,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
           {currentTab === 'pastes' && (
             <>
             <div className="mb-6 space-y-4">
-              <SearchBar onSearch={handleSearch} loading={loading} />
+              <SearchBar value={query} onSearch={handleSearch} loading={loading} />
               <FilterChips
                 sources={sources}
                 types={types}

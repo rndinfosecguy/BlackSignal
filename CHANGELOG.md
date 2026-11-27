@@ -6,6 +6,16 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.16.3] — 2026-11-27
+
+### Fixed
+- **The search bar no longer loses the active term when switching tabs.** The input is
+  initialised from the parent's filter state and re-syncs when that state changes, while
+  ignoring debounced echoes so in-progress typing isn't overwritten. Previously the filter
+  stayed active after returning to the Pastes tab, but the input rendered empty.
+
+---
+
 ## [1.16.2] — 2026-11-27
 
 ### Changed

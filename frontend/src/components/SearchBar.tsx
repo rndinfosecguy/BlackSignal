@@ -1,9 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 
-interface Props { onSearch: (q: string) => void; loading: boolean }
+interface Props {
+  /** Active search term from the parent (persists across tab switches). */
+  value: string
+  onSearch: (q: string) => void
+  loading: boolean
+}
 
-export default function SearchBar({ onSearch, loading }: Props) {
-  const [value, setValue] = useState('')
+export default function SearchBar({ value, onSearch, loading }: Props) {
+  const [text, setText] = useState(value)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -11,9 +16,18 @@ export default function SearchBar({ onSearch, loading }: Props) {
     if (inputRef.current) inputRef.current.focus()
   }, [])
 
+  // The component is unmounted when switching tabs; initialise from the parent
+  // term and re-sync when it changes externally. Skip while the user is typing
+  // so a debounced echo never overwrites newer input.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current && text !== value) {
+      setText(value)
+    }
+  }, [value, text])
+
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value
-    setValue(v)
+    setText(v)
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => onSearch(v), 300)
   }, [onSearch])
@@ -21,9 +35,9 @@ export default function SearchBar({ onSearch, loading }: Props) {
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       clearTimeout(timerRef.current)
-      onSearch(value)
+      onSearch(text)
     }
-  }, [onSearch, value])
+  }, [onSearch, text])
 
   return (
     <div className="relative">
@@ -31,7 +45,7 @@ export default function SearchBar({ onSearch, loading }: Props) {
         <input
           ref={inputRef}
           type="search"
-          value={value}
+          value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="Search pastes..."
@@ -41,7 +55,7 @@ export default function SearchBar({ onSearch, loading }: Props) {
           <span className="text-[#555555] text-xs ml-2">searching...</span>
         )}
         <button
-          onClick={() => { clearTimeout(timerRef.current); onSearch(value) }}
+          onClick={() => { clearTimeout(timerRef.current); onSearch(text) }}
           className="text-xs px-3 py-1 rounded-md border border-[#222222] text-[#666666] hover:text-[#ff004d] hover:border-[#ff004d] transition-all ml-2"
         >
           Search
