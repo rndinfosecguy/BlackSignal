@@ -8,11 +8,31 @@ interface ReportMeta {
   created_at: string
   title: string
   paste_count?: number
+  risk_level?: string
+  risk_score?: number
 }
 
 interface ReportDetail {
   meta: ReportMeta
   markdown: string
+}
+
+const RISK_STYLES: Record<string, string> = {
+  critical: 'bg-[#ff004d]/15 text-[#ff004d] border border-[#ff004d]/40',
+  high: 'bg-[#ff8c1a]/15 text-[#ff8c1a] border border-[#ff8c1a]/40',
+  medium: 'bg-[#ffd700]/15 text-[#ffd700] border border-[#ffd700]/40',
+  low: 'bg-[#00ff41]/10 text-[#00ff41] border border-[#00ff41]/40',
+}
+const NO_RATING_STYLE = 'bg-[#1a1a1a] text-[#666666] border border-[#222222]'
+
+function riskLabel(meta: ReportMeta): { text: string; style: string } {
+  const level = (meta.risk_level || '').toLowerCase()
+  if (!level || !(level in RISK_STYLES)) {
+    return { text: 'No rating', style: NO_RATING_STYLE }
+  }
+  const label = level.charAt(0).toUpperCase() + level.slice(1)
+  const score = typeof meta.risk_score === 'number' ? ` · ${meta.risk_score}` : ''
+  return { text: `${label}${score}`, style: RISK_STYLES[level] }
 }
 
 export default function ReportArchive() {
@@ -84,7 +104,9 @@ export default function ReportArchive() {
         </div>
       ) : (
         <div className="space-y-2">
-          {reports.map(r => (
+          {reports.map(r => {
+            const risk = riskLabel(r)
+            return (
             <div key={r.id}
               className="bg-[#131313] border border-[#222222] rounded-lg p-4 flex items-center gap-4">
               <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap ${
@@ -93,6 +115,12 @@ export default function ReportArchive() {
                   : 'bg-[#1a1a1a] text-[#888888]'
               }`}>
                 {r.type === 'batch' ? 'Batch' : 'Single'}
+              </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap ${risk.style}`}
+                title={r.risk_level
+                  ? `Risk: ${r.risk_level} (score ${r.risk_score ?? '?'}/100) · scale 0-24 Low, 25-49 Medium, 50-74 High, 75-100 Critical`
+                  : 'No risk rating available for this report'}>
+                {risk.text}
               </span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-[#e8e8e8] truncate" style={{ fontFamily: 'var(--font-mono)' }}
@@ -134,7 +162,8 @@ export default function ReportArchive() {
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

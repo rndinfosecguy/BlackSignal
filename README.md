@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Python](https://img.shields.io/badge/Python-3.12-blueviolet)
 ![Docker](https://img.shields.io/badge/Docker-ready-0db7ed)
-![Version](https://img.shields.io/badge/version-1.15.3-brightgreen)
+![Version](https://img.shields.io/badge/version-1.16.2-brightgreen)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 
 A fast, self-hosted web application to **browse, search, categorize and analyze paste data** from multiple paste sites (e.g. Pastebin, GitHub Gists, dpaste, pastes.io). It indexes pastes into a full-text search engine and automatically flags **sensitive information** - leaked credentials, API keys, private keys, connection strings and more.
@@ -173,8 +173,10 @@ Settings live in `data/settings.json` (file mode `0600` - treat it like a secret
 
 ### Usage
 
-- **Per paste** - open a paste and click **Analyze with LLM** for a structured summary (technical findings, personal findings, risk assessment).
-- **Batch** - apply filters, then click **LLM Report** next to the export buttons. Every visible paste is analyzed individually, results are synthesized into an overall report.
+- **Per paste** - open a paste and click **Analyze with LLM** for a structured analysis. The model looks for sensitive values and for **relationships/combinations** across lines (credential bundles, PII composites, infrastructure maps).
+- **Batch** - apply filters, then click **LLM Report** next to the export buttons. Every visible paste is analyzed individually; findings are deduplicated and correlated across pastes, and the report is rendered from a fixed template (executive summary, risk, highlights, correlated findings, categories, detailed findings, pastes analyzed).
+- **Consistent structure** - analyses are requested as JSON, validated, and rendered deterministically, so every report has the same sections regardless of model wording. The structured result is stored as `analysis.json` next to the report.
+- **Risk score** - each report carries a 0-100 score with the scale printed in the report: 0-24 Low, 25-49 Medium, 50-74 High, 75-100 Critical. The score is derived from the identified findings (severity, combination/context findings, category breadth, and cross-paste reuse), not proposed by the model, so it always reflects what was actually found. The Report Archive shows a colour-coded rating badge per entry (or "No rating" for legacy/unstructured reports).
 - **Archive** - every analysis is saved automatically and listed in the **Report Archive** tab.
 
 ### Limits
@@ -204,7 +206,7 @@ The API is same-origin only - there is no CORS support. Browsers must reach it t
 | POST | `/api/indexer-info` | Update auto-index interval. Body: `{ "interval_seconds": N }` (minimum 3600) |
 | POST | `/api/reindex` | Trigger a manual re-index. Accepts `?mode=standard` (default), `?mode=comprehensive` (no size limit), or `?mode=purge` (clear DB + full reindex) |
 | GET | `/api/db-stats` | Database stats: `{ db_size_bytes, paste_count, raw_pastes_size_bytes, raw_files_total, indexable_files_count }` - `indexable_files_count` mirrors the indexer walk; `raw_files_total` is recursive |
-| GET | `/api/version` | App version: `{ version: "1.15.3" }` |
+| GET | `/api/version` | App version: `{ version: "1.16.2" }` |
 | GET | `/api/last-reindex` | Last reindex result: `{ indexed, deleted, skipped, total, finished_at, duration_seconds, last_attempt_at, last_error? }` or `{}` if none. Counts are from the last **successful** run; failure details are included without discarding them. |
 | POST | `/api/auth/login` | Sign in. Body: `{ "username": "...", "password": "..." }` - sets the session cookie |
 | GET | `/api/auth/session` | Session state: `{ authenticated: bool, username }` |
@@ -214,13 +216,13 @@ The API is same-origin only - there is no CORS support. Browsers must reach it t
 | GET | `/api/llm/key` | Masked key preview: `{ key_preview: "sk-or-v1-...abcd" }` (empty if unset) |
 | POST | `/api/llm/key` | Set the OpenRouter key. Body: `{ "key": "sk-or-v1-..." }` |
 | DELETE | `/api/llm/key` | Remove the stored OpenRouter key |
-| POST | `/api/llm/summarize/{id}` | Analyze one paste. Returns `{ summary: "<markdown>" }` |
+| POST | `/api/llm/summarize/{id}` | Analyze one paste. Returns `{ summary: "<rendered markdown>", analysis: {...}\|null, structured: bool, report_id }` |
 | POST | `/api/llm/report` | Start a batch report for the filtered pastes. Same filter params as `/api/pastes/export` |
 | GET | `/api/llm/report-status` | Report progress: `{ running, current, total, phase, final_report, error }` |
 | POST | `/api/llm/report-cancel` | Cancel an in-progress report |
 | GET | `/api/llm/report-download` | Backward-compatible alias: newest archived batch report as a ZIP |
-| GET | `/api/reports` | List archived LLM reports: `{ reports: [{ id, type, created_at, title, paste_count? }] }` |
-| GET | `/api/reports/{id}` | One report: `{ meta, markdown }` |
+| GET | `/api/reports` | List archived LLM reports: `{ reports: [{ id, type, created_at, title, paste_count?, risk_level?, risk_score? }] }` |
+| GET | `/api/reports/{id}` | One report: `{ meta, markdown, analysis }` (`analysis` is the structured result, or `null`) |
 | GET | `/api/reports/{id}/download` | Download one report - single → `.md`, batch → `.zip` |
 | DELETE | `/api/reports/{id}` | Delete an archived report |
 

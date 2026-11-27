@@ -22,6 +22,8 @@ import llm
 import reports
 import auth
 import settings
+import analysis
+import render
 import json as _json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -579,13 +581,16 @@ def api_llm_summarize(paste_id: str):
     content = paste.get("content", "")
     if not content:
         raise HTTPException(status_code=400, detail="Paste has no content")
+    title = f"{paste.get('source', '?')}:{paste.get('filename') or paste_id}"
     try:
-        summary = llm.summarize_paste(paste_id, content)
+        result = llm.summarize_paste(paste_id, content, title=title)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         logger.error("LLM summarize failed for %s: %s", paste_id, e)
         raise HTTPException(status_code=502, detail=str(e))
+
+    markdown = result["markdown"]
 
     # Persist to the report archive (best-effort — never fail the analysis).
     report_id = None
@@ -596,13 +601,19 @@ def api_llm_summarize(paste_id: str):
                 "source": paste.get("source"),
                 "filename": paste.get("filename"),
             },
-            summary,
+            markdown,
             model=llm.MODEL,
+            analysis=result.get("analysis"),
         )
     except Exception:
         logger.exception("Failed to archive single-paste report %s", paste_id)
 
-    return {"summary": summary, "report_id": report_id}
+    return {
+        "summary": markdown,
+        "analysis": result.get("analysis"),
+        "structured": result.get("structured", False),
+        "report_id": report_id,
+    }
 
 
 @app.get("/api/llm/key")
@@ -636,14 +647,14 @@ MAX_REPORT_PASTES = 500
 
 
 def _build_detailed_findings(findings: list, max_rows: int = 2000) -> str:
-    """Build a deduplicated markdown table of findings from BlackSignal detections."""
+    """Build a deduplicated markdown table of BlackSignal's own detections."""
     if not findings:
-        return "## Detailed Findings\n\nNo individual findings detected.\n"
+        return "## BlackSignal Detections\n\nNo regex detections.\n"
 
     lines = [
-        "## Detailed Findings",
+        "## BlackSignal Detections",
         "",
-        f"{len(findings)} unique finding(s) across the analyzed pastes.",
+        f"{len(findings)} unique detection(s) from BlackSignal's regex scanner.",
         "",
         "| Source | Paste ID | Type | Line | Finding |",
         "|---|---|---|---|---|",
@@ -737,15 +748,14 @@ def api_llm_report(
 
     def _generate():
         llm._set_report_running(total)
-        summaries = []
-        per_paste_files = []
+        per_paste_files: list[dict] = []
         used_names: set = set()
-        # Structured list of every paste included in the report (written to pastes.json).
         pastes_meta: list = []
-        # Deterministic, deduplicated findings collected directly from BlackSignal's
-        # own regex detections (avoids the LLM repeating the same finding many times).
-        findings = []
+        structured_findings: list = []
+        regex_findings: list = []
         seen = set()
+        analysed = 0
+
         for i, row in enumerate(rows):
             if llm.is_report_cancelled():
                 return
@@ -763,8 +773,9 @@ def api_llm_report(
             row_has_passwords = row.get("has_passwords", 0)
             secret_types = row.get("secret_types", [])
             secrets_detail = row.get("secrets_detail") or []
+            title = f"{row_source}:{filename}"
 
-            pastes_meta.append({
+            entry = {
                 "id": pid,
                 "source": row_source,
                 "filename": filename,
@@ -774,7 +785,9 @@ def api_llm_report(
                 "has_passwords": bool(row_has_passwords),
                 "secret_types": secret_types,
                 "first_seen": row.get("first_seen"),
-            })
+                "findings": 0,
+            }
+            pastes_meta.append(entry)
 
             for sd in secrets_detail:
                 match = (sd.get("match") or "").strip()
@@ -784,7 +797,7 @@ def api_llm_report(
                 if key in seen:
                     continue
                 seen.add(key)
-                findings.append({
+                regex_findings.append({
                     "source": row_source,
                     "id": pid,
                     "filename": filename,
@@ -793,85 +806,113 @@ def api_llm_report(
                     "match": match,
                 })
 
-            bsi_str = "\n".join(
-                f"- Line {sd.get('line', '?')}: [{sd.get('type', '?')}] {sd.get('match', '')}"
-                for sd in secrets_detail
-            ) or "None"
+            out_name = reports.safe_filename(
+                f"{row_source}_{filename}" if filename else f"{row_source}_{pid}",
+                used_names,
+            )
 
             try:
-                summary = llm.summarize_paste(pid, content)
-                entry = (
-                    f"### Paste: {row_source}:{filename}\n\n"
-                    f"**Source**: {row_source} | **ID**: `{pid}` | **Type**: {row_type} | **Size**: {row.get('size', 0)}B\n\n"
-                    f"**BlackSignal detection**: has_secrets={row_has_secrets}, has_passwords={row_has_passwords}\n"
-                    f"**Detected types**: {', '.join(secret_types) if secret_types else 'none'}\n\n"
-                    f"**BlackSignal findings**:\n{bsi_str}\n\n"
-                    f"**LLM analysis**:\n{summary}\n"
-                )
-                summaries.append(entry)
-                per_paste_files.append({
-                    "filename": reports.safe_filename(
-                        f"{row_source}_{filename}" if filename else f"{row_source}_{pid}",
-                        used_names,
-                    ),
-                    "content": entry,
-                })
+                result = llm.summarize_paste(pid, content, title=title)
+                structured = result.get("analysis") if result.get("structured") else None
+                if structured:
+                    entry["findings"] = len(structured.get("findings") or [])
+                    for f in structured.get("findings") or []:
+                        structured_findings.append({
+                            **f,
+                            "paste_id": pid,
+                            "source": row_source,
+                            "filename": filename,
+                        })
+                    analysed += 1
+                per_paste_files.append({"filename": out_name, "content": result["markdown"]})
             except (ValueError, RuntimeError) as e:
-                fail_entry = f"### Paste: {row_source}:{filename}\n\n*Analysis failed: {e}*\n"
-                summaries.append(fail_entry)
-                per_paste_files.append({
-                    "filename": reports.safe_filename(
-                        f"{row_source}_{filename}" if filename else f"{row_source}_{pid}",
-                        used_names,
-                    ),
-                    "content": fail_entry,
-                })
+                fail_entry = (
+                    f"# BlackSignal — LLM Analysis\n\n**Paste**: `{title}`\n\n"
+                    f"## Analysis Failed\n\n*{e}*\n"
+                )
+                per_paste_files.append({"filename": out_name, "content": fail_entry})
             llm._set_report_progress(i + 1)
+
         if llm.is_report_cancelled():
             return
-        # Final aggregation (narrative sections only — detailed findings are appended below)
         llm._set_report_progress(total, phase="aggregating")
-        if summaries:
-            all_text = "\n---\n".join(summaries)
-            try:
-                final = llm._call_llm([
-                    {"role": "system", "content": llm.REPORT_PROMPT},
-                    {"role": "user", "content": f"INDIVIDUAL ANALYSES:\n\n{all_text}"},
-                ])
-                header = (
-                    f"# BlackSignal — LLM Security Report\n\n"
-                    f"**Pastes analyzed**: {len(summaries)} of {total}\n"
-                    f"**Filters**: q={q!r}, source={source}, content_type={content_type}, "
-                    f"has_secrets={has_secrets}, secret_type={secret_type}\n\n---\n\n"
-                )
-                detailed = _build_detailed_findings(findings)
-                report_text = header + final + "\n\n" + detailed
-                llm._set_report_done(report_text, per_paste_files)
-                # Persist to the report archive (best-effort — never fail the run).
-                try:
-                    reports.save_batch(
-                        {
-                            "filters": {
-                                "q": q,
-                                "source": source,
-                                "content_type": content_type,
-                                "has_secrets": has_secrets,
-                                "secret_type": secret_type,
-                                "date_from": date_from,
-                                "date_to": date_to,
-                            },
-                        },
-                        report_text,
-                        per_paste_files,
-                        model=llm.MODEL,
-                        pastes=pastes_meta,
-                    )
-                except Exception:
-                    logger.exception("Failed to archive batch report")
-            except (ValueError, RuntimeError) as e:
-                llm._set_report_error(str(e))
-        else:
+        if not per_paste_files:
             llm._set_report_error("No summaries could be generated")
+            return
+
+        filters = {
+            "q": q,
+            "source": source,
+            "content_type": content_type,
+            "has_secrets": has_secrets,
+            "secret_type": secret_type,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+
+        # Deterministic aggregation: dedupe values across pastes and correlate
+        # entities that appear in more than one paste.
+        deduped = analysis.dedupe_findings(structured_findings)
+        correlations = analysis.correlate(structured_findings)
+
+        compact = _json.dumps({
+            "paste_count": len(pastes_meta),
+            "analysed": analysed,
+            "filters": {k: v for k, v in filters.items() if v},
+            "findings": [
+                {
+                    "severity": f.get("severity"),
+                    "kind": f.get("kind"),
+                    "category": f.get("category"),
+                    "title": f.get("title"),
+                    "relationship": f.get("relationship"),
+                    "entities": f.get("entities", []),
+                    "pastes": len(f.get("pastes", [])),
+                }
+                for f in deduped[:150]
+            ],
+            "correlations": [
+                {"type": c["type"], "value": c["value"], "pastes": len(c["pastes"])}
+                for c in correlations[:100]
+            ],
+        }, separators=(",", ":"))
+
+        try:
+            narrative = llm.summarize_batch(compact)
+        except (ValueError, RuntimeError) as e:
+            llm._set_report_error(str(e))
+            return
+        # The rating is derived from the identified findings (and correlations).
+        narrative["risk"] = analysis.compute_risk(deduped, correlations)
+
+        report_text = render.render_batch(
+            narrative,
+            deduped,
+            correlations,
+            pastes_meta,
+            filters=filters,
+            total_analyzed=len(pastes_meta),
+            regex_findings_markdown=_build_detailed_findings(regex_findings),
+        )
+        llm._set_report_done(report_text, per_paste_files)
+
+        # Persist to the report archive (best-effort — never fail the run).
+        try:
+            reports.save_batch(
+                {"filters": filters},
+                report_text,
+                per_paste_files,
+                model=llm.MODEL,
+                pastes=pastes_meta,
+                analysis={
+                    "narrative": narrative,
+                    "findings": deduped,
+                    "correlations": correlations,
+                    "analysed": analysed,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to archive batch report")
     threading.Thread(target=_generate, daemon=True).start()
     return {"status": "started", "total": total}
 

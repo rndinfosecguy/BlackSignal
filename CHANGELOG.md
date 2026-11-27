@@ -6,6 +6,81 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.16.2] — 2026-11-27
+
+### Changed
+- **Risk rating is derived from the identified findings**, not proposed by the model. The
+  model now returns only the summary and findings (plus highlights for batch reports);
+  the score is computed in code:
+  - base by effective severity: Low 18, Medium 40, High 62, Critical 82
+  - `combination` findings +8, `contextual` +6
+  - +4 per additional high/critical category (max +8)
+  - batch: +4 when entities are reused across pastes, +2 per additional (max +8)
+  - clamped to 0-100; no findings -> 0 / Low
+- **Severity floors** stop critical data being under-rated: passwords, private keys, API
+  keys, SSN, passport, card and bank-account entities — and any `combination` finding in
+  the credential/PII/financial categories — are at least High regardless of the model's
+  label.
+- The rating rationale is deterministic and names the finding driving the score; the model
+  still writes the executive summary, highlights and per-finding reasoning.
+- Any `risk` object returned by the model is ignored.
+
+---
+
+## [1.16.1] — 2026-11-27
+
+### Added
+- **Risk rating in the Report Archive.** Each entry shows a colour-coded badge — Critical
+  (red), High (orange), Medium (yellow), Low (green) — including the numeric score.
+  Reports without a rating (unstructured/legacy) show a grey **No rating** badge.
+- Report metadata now stores `risk_level` and `risk_score`, exposed via `/api/reports`.
+
+### Changed
+- **Documented 0-100 risk scale:** 0-24 Low, 25-49 Medium, 50-74 High, 75-100 Critical.
+  The level is derived from the score (so label and number always agree), the scale is
+  printed in the report, and the prompt includes a scoring rubric.
+- A missing/invalid score is derived from the model's level instead of silently becoming 0;
+  the batch narrative fallback uses 45 (Medium).
+
+---
+
+## [1.16.0] — 2026-11-27
+
+### Added
+- **Structured LLM analyses.** The model is asked for a JSON object (summary, risk,
+  findings with kind/category/severity/confidence/evidence/entities/relationship).
+  Output is validated and normalised, with one repair retry; reports are rendered
+  deterministically from that data, so sections and layout no longer vary between runs.
+- **Relationship-aware analysis.** Both prompts now look for values that are only
+  sensitive in combination or context (credential bundles, PII composites, infrastructure
+  maps, business context). Findings carry `kind: standalone|combination|contextual`, the
+  involved entities, evidence lines and a relationship description. Personal data is
+  explicitly first-class: full names, dates of birth, addresses, phone numbers, government
+  IDs and financial data are captured and grouped per person when they describe the same
+  individual.
+- **Deterministic structural hints.** Before the call, ENV/INI/YAML/JSON/CSV-style
+  key/value groups, PEM blocks, JWTs and URLs with embedded credentials are summarised
+  with line numbers and supplied to the model to improve relationship detection.
+- **Evidence line correction.** When the model cites a nearby line, evidence is re-anchored
+  to the actual line containing the excerpt, so reported line numbers are reliable.
+- **Batch correlation.** Per-paste structured findings are deduplicated and entities seen
+  in multiple pastes are correlated in Python — including full names and addresses, which
+  use strict normalised exact-match rules (multi-word names, full addresses) to avoid
+  noisy matches. The final report has a **Correlated
+  Findings** section and a fixed template. The narrative is the only part written by the
+  model.
+- Reports store `analysis.json` next to `report.md`; batch ZIP bundles include it too.
+
+### Changed
+- `POST /api/llm/summarize/{id}` returns `{ summary, analysis, structured, report_id }`.
+- `GET /api/reports/{id}` includes the stored `analysis`.
+- Batch reports render a separate **BlackSignal Detections** section for the regex
+  scanner's results, distinct from the LLM's structured findings.
+- If the model returns invalid JSON twice, the raw text is stored as an *unstructured*
+  analysis instead of failing the run.
+
+---
+
 ## [1.15.3] — 2026-11-27
 
 ### Added

@@ -143,7 +143,8 @@ def _prune() -> None:
 
 # ── save ─────────────────────────────────────────────────────────────────────
 
-def save_single(paste_meta: dict, markdown: str, model: str | None = None) -> str:
+def save_single(paste_meta: dict, markdown: str, model: str | None = None,
+                analysis: dict | None = None) -> str:
     """Persist a single-paste analysis. Returns the new report id."""
     report_id = _new_id()
     path = os.path.join(base_dir(), report_id)
@@ -166,20 +167,28 @@ def save_single(paste_meta: dict, markdown: str, model: str | None = None) -> st
         "paste_id": paste_id,
         "model": model,
     }
+    risk = analysis.get("risk") if isinstance(analysis, dict) else None
+    if isinstance(risk, dict):
+        meta["risk_level"] = risk.get("level")
+        meta["risk_score"] = risk.get("score")
     _write_atomic(os.path.join(path, "meta.json"), json.dumps(meta, indent=2))
     _write_atomic(os.path.join(path, "report.md"), markdown)
+    if analysis is not None:
+        _write_atomic(os.path.join(path, "analysis.json"), json.dumps(analysis, indent=2))
     _prune()
     return report_id
 
 
 def save_batch(meta_fields: dict, markdown: str,
                per_paste_files: list[dict], model: str | None = None,
-               pastes: list[dict] | None = None) -> str:
+               pastes: list[dict] | None = None,
+               analysis: dict | None = None) -> str:
     """Persist a multi-paste report plus its per-paste analyses.
 
     ``pastes`` is the structured list of pastes included in the report
     (source, id, filename, …); it is written to ``pastes.json`` so the exact
-    input set is machine-readable.
+    input set is machine-readable. ``analysis`` is the aggregated structured
+    result and is stored as ``analysis.json``.
     """
     report_id = _new_id()
     path = os.path.join(base_dir(), report_id)
@@ -196,10 +205,17 @@ def save_batch(meta_fields: dict, markdown: str,
         "filters": meta_fields.get("filters"),
         "model": model,
     }
+    narrative = analysis.get("narrative") if isinstance(analysis, dict) else None
+    risk = narrative.get("risk") if isinstance(narrative, dict) else None
+    if isinstance(risk, dict):
+        meta["risk_level"] = risk.get("level")
+        meta["risk_score"] = risk.get("score")
     _write_atomic(os.path.join(path, "meta.json"), json.dumps(meta, indent=2))
     _write_atomic(os.path.join(path, "report.md"), markdown)
     if pastes is not None:
         _write_atomic(os.path.join(path, "pastes.json"), json.dumps(pastes, indent=2))
+    if analysis is not None:
+        _write_atomic(os.path.join(path, "analysis.json"), json.dumps(analysis, indent=2))
 
     used: set = set()
     for f in per_paste_files:
@@ -246,7 +262,15 @@ def get_report(report_id: str) -> dict | None:
             markdown = f.read()
     except OSError:
         markdown = ""
-    return {"meta": meta, "markdown": markdown}
+
+    analysis = None
+    try:
+        with open(os.path.join(d, "analysis.json"), encoding="utf-8") as f:
+            analysis = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        analysis = None
+
+    return {"meta": meta, "markdown": markdown, "analysis": analysis}
 
 
 def delete_report(report_id: str) -> bool:
@@ -283,6 +307,10 @@ def build_zip(report_id: str) -> bytes | None:
         if os.path.isfile(pastes_json_path):
             with open(pastes_json_path, encoding="utf-8", errors="replace") as f:
                 zf.writestr("pastes.json", f.read())
+        analysis_json_path = os.path.join(d, "analysis.json")
+        if os.path.isfile(analysis_json_path):
+            with open(analysis_json_path, encoding="utf-8", errors="replace") as f:
+                zf.writestr("analysis.json", f.read())
         pastes_dir = os.path.join(d, "pastes")
         pastes = []
         if os.path.isdir(pastes_dir):
@@ -295,6 +323,7 @@ def build_zip(report_id: str) -> bytes | None:
             "- `report.md` — the aggregated security report.\n"
             "- `pastes/` — one markdown analysis per analyzed paste.\n"
             "- `pastes.json` — source, ID and metadata for every paste included.\n"
+            "- `analysis.json` — structured findings, correlations and narrative.\n"
             "- `meta.json` — report metadata.\n\n"
             f"Created: {meta.get('created_at', '?')}\n"
             f"Pastes bundled: {len(pastes)}\n"
