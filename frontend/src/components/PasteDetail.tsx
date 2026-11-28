@@ -100,6 +100,8 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
   const [llmLoading, setLlmLoading] = useState(false)
   const [llmResponse, setLlmResponse] = useState<string | null>(null)
   const [llmError, setLlmError] = useState<string | null>(null)
+  const [confirmClose, setConfirmClose] = useState(false)
+  const llmAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const reqId = ++fetchReqId.current
@@ -133,6 +135,23 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
   // Lock background scrolling while the modal is open.
   useEffect(() => lockScroll(), [])
 
+  // Drop the in-flight analysis request when the modal unmounts.
+  useEffect(() => () => llmAbortRef.current?.abort(), [])
+
+  // If the analysis finishes or fails while the warning is open, dismiss it.
+  useEffect(() => {
+    if (!llmLoading) setConfirmClose(false)
+  }, [llmLoading])
+
+  // Closing while a single-paste analysis is running discards the result.
+  const handleCloseRequest = () => {
+    if (llmLoading) {
+      setConfirmClose(true)
+      return
+    }
+    onClose()
+  }
+
   // Auto-grow the note composer.
   useEffect(() => {
     const el = noteRef.current
@@ -146,11 +165,13 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
     const h = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (confirmSaveOpen) { setConfirmSaveOpen(false); return }
+      if (confirmClose) { setConfirmClose(false); return }
+      if (llmLoading) { setConfirmClose(true); return }
       onClose()
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [onClose, confirmSaveOpen])
+  }, [onClose, confirmSaveOpen, confirmClose, llmLoading])
 
   const handleCopy = () => {
     if (!paste) return
@@ -174,19 +195,26 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
 
   const handleLlmSummarize = async () => {
     if (llmLoading || !paste) return
+    const controller = new AbortController()
+    llmAbortRef.current = controller
     setLlmLoading(true)
     setLlmError(null)
     setLlmResponse(null)
     try {
-      const res = await fetch(`/api/llm/summarize/${encodeURIComponent(id)}`, { method: 'POST' })
+      const res = await fetch(`/api/llm/summarize/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        signal: controller.signal,
+      })
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.detail || `HTTP ${res.status}`)
       }
       setLlmResponse(data.summary)
     } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
       setLlmError(e instanceof Error ? e.message : 'Summarization failed')
     } finally {
+      if (llmAbortRef.current === controller) llmAbortRef.current = null
       setLlmLoading(false)
     }
   }
@@ -301,7 +329,7 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
   )
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
+    <div onClick={handleCloseRequest} className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm overflow-y-hidden p-4">
       <div onClick={e => e.stopPropagation()} className="relative bg-[#0d0d0d] border border-[#222222] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-[#222222]">
           <div className="flex items-center gap-3 flex-wrap">
@@ -340,15 +368,11 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
                 </span>
               ) : llmResponse ? 'Analyze Again' : 'Analyze with LLM'}
             </button>
-            <button onClick={handleCopy}
-              className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all">
-              {copied ? 'Copied' : 'Copy'}
-            </button>
             <button onClick={handleDownload}
               className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#666666] hover:text-[#00e5ff] hover:border-[#00e5ff] transition-all">
               Download
             </button>
-            <button onClick={onClose} className="text-[#666666] hover:text-[#ff004d] text-lg transition-all leading-none">&times;</button>
+            <button onClick={handleCloseRequest} className="text-[#666666] hover:text-[#ff004d] text-lg transition-all leading-none">&times;</button>
           </div>
         </div>
 
@@ -517,6 +541,29 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
             )}
             {paste && contentVisible && (
               <div className="flex-1 min-w-0">
+                <div className="sticky top-0 z-10 mb-1 flex justify-end">
+                  <button onClick={handleCopy}
+                    title={copied ? 'Copied' : 'Copy paste content'}
+                    aria-label={copied ? 'Copied' : 'Copy paste content'}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md border bg-[#131313]/95 backdrop-blur-sm transition-colors cursor-pointer ${
+                      copied
+                        ? 'border-[#00e5ff]/50 text-[#00e5ff]'
+                        : 'border-[#222222] text-[#666666] hover:border-[#00e5ff] hover:text-[#00e5ff]'
+                    }`}>
+                    {copied ? (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="12" height="12" rx="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
                 {isTruncated && (
                   <div className="text-xs text-[#ffd700]/80 px-3 py-2 mb-2 bg-[#131313] rounded-md">
                     File is large - only first 2,000 lines or 200KB are shown.
@@ -582,6 +629,32 @@ export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
                 <button onClick={() => performSave(false, false)} disabled={triageSaving}
                   className="rounded-md bg-[#ff004d] px-3.5 py-1.5 text-xs font-medium text-[#0d0d0d] transition-all hover:bg-[#ff1a5e] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
                   Just this paste
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {confirmClose && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center rounded-xl bg-[#0d0d0d]/75 p-6 backdrop-blur-sm"
+            onClick={() => setConfirmClose(false)}>
+            <div role="dialog" aria-modal="true" aria-labelledby="close-analyzing-title"
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-xl border border-[#2a2a2a] bg-[#141414] p-5 shadow-2xl">
+              <div id="close-analyzing-title" className="text-sm font-medium text-[#ff004d]">
+                Close while analyzing?
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-[#888888]">
+                The LLM analysis is still running. Closing this paste will discard the result
+                when it finishes.
+              </p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setConfirmClose(false)}
+                  className="rounded-md px-2.5 py-1.5 text-xs text-[#666666] transition-colors hover:text-[#bbbbbb] cursor-pointer">
+                  Keep analyzing
+                </button>
+                <button onClick={() => { llmAbortRef.current?.abort(); onClose() }}
+                  className="rounded-md border border-[#ff004d] px-3 py-1.5 text-xs text-[#ff004d] transition-all hover:bg-[#ff004d]/10 cursor-pointer">
+                  Close anyway
                 </button>
               </div>
             </div>

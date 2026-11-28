@@ -281,6 +281,24 @@ def delete_report(report_id: str) -> bool:
     return True
 
 
+def delete_all_reports() -> int:
+    """Delete every archived report. Returns the number of directories removed."""
+    base = base_dir()
+    removed = 0
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return 0
+    for name in names:
+        if not _ID_RE.match(name):
+            continue
+        d = os.path.join(base, name)
+        if os.path.isdir(d):
+            shutil.rmtree(d, ignore_errors=True)
+            removed += 1
+    return removed
+
+
 # ── download ─────────────────────────────────────────────────────────────────
 
 def build_zip(report_id: str) -> bytes | None:

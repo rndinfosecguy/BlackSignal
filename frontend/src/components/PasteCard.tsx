@@ -45,7 +45,6 @@ export default memo(function PasteCard(props: Props) {
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {indexedDate && <span className="text-[10px] text-[#444444]">Indexed: {indexedDate}</span>}
           {badge && (
             <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap"
               style={{ color: badge.color, borderColor: `${badge.color}55`, backgroundColor: `${badge.color}14` }}>
@@ -71,13 +70,16 @@ export default memo(function PasteCard(props: Props) {
         {snippet}
       </div>
 
-      {secretTypes.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2 min-w-0">
+      <div className="mt-2 flex items-end justify-between gap-2 min-w-0">
+        <div className="flex flex-wrap gap-1 min-w-0">
           {secretTypes.map(t => (
             <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-[#ff004d]/5 text-[#ff004d]/70 break-all">{t}</span>
           ))}
         </div>
-      )}
+        {indexedDate && (
+          <span className="text-[10px] text-[#444444] shrink-0">Indexed: {indexedDate}</span>
+        )}
+      </div>
     </div>
   )
 })

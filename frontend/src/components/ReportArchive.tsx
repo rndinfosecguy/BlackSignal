@@ -41,6 +41,8 @@ export default function ReportArchive() {
   const [error, setError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<ReportDetail | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [confirmPurgeAll, setConfirmPurgeAll] = useState(false)
+  const [purging, setPurging] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -79,6 +81,31 @@ export default function ReportArchive() {
     load()
   }
 
+  const handlePurgeAll = async () => {
+    setPurging(true)
+    try {
+      const res = await fetch('/api/reports', { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setError(null)
+    } catch {
+      setError('Failed to purge reports')
+    } finally {
+      setPurging(false)
+      setConfirmPurgeAll(false)
+      load()
+    }
+  }
+
+  // Escape closes the purge confirmation.
+  useEffect(() => {
+    if (!confirmPurgeAll) return
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !purging) setConfirmPurgeAll(false)
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [confirmPurgeAll, purging])
+
   const fmtDate = (iso: string): string => {
     const d = new Date(iso)
     return isNaN(d.getTime()) ? iso : d.toLocaleString()
@@ -89,8 +116,14 @@ export default function ReportArchive() {
   return (
     <div className="space-y-4">
       {reports.length > 0 && (
-        <div className="text-xs text-[#888888]">
-          {reports.length.toLocaleString()} archived report{reports.length === 1 ? '' : 's'}
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-[#888888]">
+            {reports.length.toLocaleString()} archived report{reports.length === 1 ? '' : 's'}
+          </div>
+          <button onClick={() => setConfirmPurgeAll(true)}
+            className="text-xs px-3 py-1.5 rounded-md border border-[#ff004d]/30 text-[#ff004d]/80 hover:text-[#ff004d] hover:border-[#ff004d] hover:bg-[#ff004d]/10 transition-all cursor-pointer">
+            Purge all reports
+          </button>
         </div>
       )}
 
@@ -164,6 +197,33 @@ export default function ReportArchive() {
             </div>
             )
           })}
+        </div>
+      )}
+
+      {confirmPurgeAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0d0d]/70 backdrop-blur-sm p-4"
+          onClick={() => { if (!purging) setConfirmPurgeAll(false) }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="purge-reports-title"
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-sm rounded-xl border border-[#2a2a2a] bg-[#141414] p-5 shadow-2xl">
+            <div id="purge-reports-title" className="text-sm font-medium text-[#e8e8e8]">
+              Purge all reports?
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-[#888888]">
+              This permanently deletes all {reports.length.toLocaleString()} archived report{reports.length === 1 ? '' : 's'} and
+              their files. This cannot be undone.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button onClick={() => setConfirmPurgeAll(false)} disabled={purging}
+                className="rounded-md px-2.5 py-1.5 text-xs text-[#666666] transition-colors hover:text-[#bbbbbb] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={handlePurgeAll} disabled={purging}
+                className="rounded-md bg-[#ff004d] px-3.5 py-1.5 text-xs font-medium text-[#0d0d0d] transition-all hover:bg-[#ff1a5e] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+                {purging ? 'Purging...' : 'Purge all'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1098,6 +1098,11 @@ def api_report_get(report_id: str):
     return item
 
 
+@app.delete("/api/reports")
+def api_reports_delete_all():
+    return {"deleted": reports.delete_all_reports()}
+
+
 @app.delete("/api/reports/{report_id}")
 def api_report_delete(report_id: str):
     if not reports.delete_report(report_id):
