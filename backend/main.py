@@ -16,7 +16,7 @@ import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, export_pastes, get_paste_by_id, get_sources, \
     get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data, DB_PATH, count_pastes, \
-    QueryError, validate_fts
+    QueryError, validate_fts, update_triage, TRIAGE_STATUSES
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running, get_scheduler_info, reschedule_interval
 import llm
 import reports
@@ -101,7 +101,7 @@ def _static_path(root: str, full_path: str) -> str | None:
 # lru_cache bounded by the number of distinct filter combinations is safe.
 
 @lru_cache(maxsize=256)
-def _get_stats_cached(query, source, content_type, has_secrets, secret_types, date_from, date_to):
+def _get_stats_cached(query, source, content_type, has_secrets, secret_types, date_from, date_to, triage_status=()):
     conditions, params = build_filter_conditions(
         query=query,
         source=source,
@@ -110,6 +110,7 @@ def _get_stats_cached(query, source, content_type, has_secrets, secret_types, da
         secret_types=secret_types,
         date_from=date_from,
         date_to=date_to,
+        triage_status=triage_status,
     )
     if conditions:
         return get_stats_filtered(conditions, params)
@@ -149,6 +150,14 @@ def clear_cache():
         fn.cache_clear()
 
 
+def clear_stats_cache():
+    """Invalidate only the cached stats.
+
+    Triage changes alter the counters but never the source/type/secret-type
+    distributions, so the (more expensive) distribution scans are kept."""
+    _get_stats_cached.cache_clear()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if AUTH_DISABLED:
@@ -166,9 +175,9 @@ async def lifespan(app: FastAPI):
     init_db()
 
     # Warm the stats cache in a background thread. Running this directly here
-    # would block ASGI startup (uvicorn does not accept requests until lifespan
-    # startup returns), and on a large database the full-scan COUNT is slow —
-    # which delayed the UI and made the first /api/index-status poll fail.
+    # would block ASGI startup and delay the UI. The aggregate is index-backed
+    # now, but keeping it off the startup path avoids competing with the initial
+    # index run for I/O.
     def _warm_stats():
         try:
             # Wait for the initial index run to finish: it starts immediately at
@@ -261,6 +270,7 @@ async def auth_middleware(request: Request, call_next):
     if not user:
         # JSON 401 without WWW-Authenticate — never trigger a browser popup.
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    request.state.user = user
     return await call_next(request)
 
 
@@ -325,6 +335,7 @@ def api_stats(
     content_type: list[str] = Query([], description="Content type filter (repeatable)"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
+    triage_status: list[str] = Query([], description="Triage status filter (OR)"),
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
@@ -337,6 +348,7 @@ def api_stats(
             tuple(secret_type),
             date_from,
             date_to,
+            tuple(triage_status),
         )
     except QueryError:
         raise HTTPException(status_code=400, detail="Invalid search query")
@@ -371,6 +383,7 @@ def api_search(
     content_type: list[str] = Query([], description="Content type filter (repeatable)"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
+    triage_status: list[str] = Query([], description="Triage status filter (OR)"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     group_by: str = Query(None, description="Group results by column (source, content_type)"),
@@ -388,6 +401,7 @@ def api_search(
                 secret_types=secret_type if secret_type else None,
                 date_from=date_from,
                 date_to=date_to,
+                triage_status=triage_status or None,
             )
         return search_pastes(
             query=normalize_fts_query(q),
@@ -399,6 +413,7 @@ def api_search(
             per_page=per_page,
             date_from=date_from,
             date_to=date_to,
+            triage_status=triage_status or None,
         )
     except QueryError:
         raise HTTPException(status_code=400, detail="Invalid search query")
@@ -412,6 +427,7 @@ def api_pastes_export(
     content_type: list[str] = Query([], description="Content type filter (repeatable)"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
+    triage_status: list[str] = Query([], description="Triage status filter (OR)"),
     include_content: str = Query("false", description="Include full paste content ('true' or 'false')"),
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
@@ -434,7 +450,8 @@ def api_pastes_export(
     rows = export_pastes(query=query, source=source or None, content_type=content_type or None,
                          has_secrets=has_sec, secret_types=secret_types,
                          include_content=inc_content,
-                         date_from=date_from, date_to=date_to)
+                         date_from=date_from, date_to=date_to,
+                         triage_status=triage_status or None)
 
     if format == "json":
         def json_stream():
@@ -476,7 +493,8 @@ def api_pastes_export(
             writer = csv.writer(output)
             headers = ["id", "filename", "source", "content_type", "size",
                        "has_passwords", "has_secrets", "secret_types",
-                       "first_seen", "secrets_detail"]
+                       "first_seen", "triage_status", "triage_reviewer",
+                       "triage_updated_at", "triage_note", "secrets_detail"]
             if inc_content:
                 headers.append("content")
             writer.writerow(headers)
@@ -490,6 +508,10 @@ def api_pastes_export(
                     row["size"], int(row["has_passwords"]), int(row["has_secrets"]),
                     _csv_safe(",".join(row["secret_types"])),
                     _csv_safe(row["first_seen"]),
+                    _csv_safe(row.get("triage_status", "new")),
+                    _csv_safe(row.get("triage_reviewer", "")),
+                    _csv_safe(row.get("triage_updated_at") or ""),
+                    _csv_safe(row.get("triage_note", "")),
                     _csv_safe(_fmt_sd(row.get("secrets_detail"))),
                 ]
                 if inc_content:
@@ -510,6 +532,31 @@ def api_paste_detail(paste_id: str):
     if not paste:
         raise HTTPException(status_code=404, detail="Paste not found")
     return paste
+
+
+@app.patch("/api/pastes/{paste_id}/triage")
+def api_paste_triage(paste_id: str, request: Request, body: dict = Body(...)):
+    status = body.get("status")
+    note = body.get("note")
+    if status is None and note is None:
+        raise HTTPException(status_code=400, detail="Provide a status and/or note")
+    if status is not None and status not in TRIAGE_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid triage status")
+    if note is not None:
+        note = str(note)
+        if len(note) > 2000:
+            raise HTTPException(status_code=400, detail="Note is too long (max 2000 characters)")
+
+    reviewer = getattr(request.state, "user", None) or "system"
+    updated = update_triage(paste_id, status=status, note=note, reviewer=reviewer)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Paste not found")
+    # Stats (filtered and global, including triage counts) are lru_cached; a
+    # triage change must invalidate them or the counters stay stale until the
+    # next index run clears the cache. Distributions are unaffected, so only
+    # the stats cache is dropped.
+    clear_stats_cache()
+    return updated
 
 
 @app.get("/api/version")
@@ -683,6 +730,7 @@ def api_llm_report(
     content_type: list[str] = Query([], description="Content type filter (repeatable)"),
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
+    triage_status: list[str] = Query([], description="Triage status filter (OR)"),
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
@@ -703,6 +751,7 @@ def api_llm_report(
             secret_types=secret_types,
             date_from=date_from,
             date_to=date_to,
+            triage_status=triage_status or None,
         )
     except QueryError:
         raise HTTPException(status_code=400, detail="Invalid search query")
@@ -733,6 +782,7 @@ def api_llm_report(
             date_from=date_from,
             date_to=date_to,
             limit=MAX_REPORT_PASTES,
+            triage_status=triage_status or None,
         ))
     except QueryError:
         llm.reset_report_progress()
@@ -846,6 +896,7 @@ def api_llm_report(
             "content_type": content_type,
             "has_secrets": has_secrets,
             "secret_type": secret_type,
+            "triage_status": triage_status,
             "date_from": date_from,
             "date_to": date_to,
         }

@@ -5,6 +5,7 @@ interface Props {
   id: string; filename: string; source: string; content_type: string; size: number
   has_passwords: boolean; has_secrets: boolean; secret_types: string[]; snippet: string
   first_seen: string
+  triage_status?: string; triage_note?: string
   onClick: (id: string) => void
 }
 
@@ -15,9 +16,16 @@ const SOURCE_NAMES: Record<string, string> = {
   pastesio: 'Pastes.io',
 }
 
+const TRIAGE_BADGES: Record<string, { label: string; color: string }> = {
+  reviewed:       { label: 'Reviewed', color: '#00ff41' },
+  false_positive: { label: 'False positive', color: '#ffd700' },
+  escalated:      { label: 'Escalated', color: '#ff004d' },
+}
+
 export default memo(function PasteCard(props: Props) {
-  const { id, filename, source, content_type, size, has_passwords, has_secrets, secret_types, snippet, first_seen, onClick } = props
+  const { id, filename, source, content_type, size, has_passwords, has_secrets, secret_types, snippet, first_seen, triage_status, triage_note, onClick } = props
   const secretTypes = (secret_types || []).slice(0, 3)
+  const badge = TRIAGE_BADGES[triage_status || ''] || null
 
   // Format first_seen to a short readable date
   const indexedDate = first_seen ? first_seen.slice(0, 10) : ''
@@ -37,6 +45,15 @@ export default memo(function PasteCard(props: Props) {
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {indexedDate && <span className="text-[10px] text-[#444444]">Indexed: {indexedDate}</span>}
+          {badge && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap"
+              style={{ color: badge.color, borderColor: `${badge.color}55`, backgroundColor: `${badge.color}14` }}>
+              {badge.label}
+            </span>
+          )}
+          {triage_note && triage_note.length > 0 && (
+            <span className="text-[11px] text-[#666666]" title={triage_note}>&#9998;</span>
+          )}
           <span className="text-xs text-[#555555]">{formatSize(size)}</span>
         </div>
       </div>

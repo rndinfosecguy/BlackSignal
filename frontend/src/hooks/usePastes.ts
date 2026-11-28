@@ -7,6 +7,7 @@ export interface FilterState {
   sources?: string[]
   types?: string[]
   secretTypes?: string[]
+  triageStatuses?: string[]
   hasSecrets?: boolean
   page?: number
   groupBy?: string
@@ -17,13 +18,23 @@ export interface FilterState {
 interface SecretTypeCount { type: string; count: number }
 interface SourceCount { source: string; count: number }
 interface TypeCount { content_type: string; count: number }
-interface Stats { total: number; with_secrets: number; with_passwords: number; sources: number }
-interface PasteResult {
+interface Stats {
+  total: number; with_secrets: number; with_passwords: number; sources: number
+  unreviewed?: number; reviewed?: number; false_positive?: number; escalated?: number
+  unreviewed_all?: number; reviewed_all?: number; false_positive_all?: number; escalated_all?: number
+  total_all?: number
+}
+export interface PasteResult {
   id: string; filename: string; source: string; content_type: string; size: number
   has_passwords: boolean; has_secrets: boolean
   secret_types: string[]
   secrets_detail: { type: string; line: number; match: string }[] | null
   first_seen: string; snippet: string
+  triage_status?: string
+  triage_note?: string
+  triage_reviewer?: string
+  triage_updated_at?: string | null
+  modified_at?: string | null
 }
 interface SearchResult { total: number; page: number; per_page: number; total_pages: number; results: PasteResult[] }
 interface GroupedResult {
@@ -47,6 +58,7 @@ function queryString(state: FilterState): string {
   if (state.sources) state.sources.forEach(s => qp.append('source', s))
   if (state.types) state.types.forEach(t => qp.append('content_type', t))
   if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
+  if (state.triageStatuses) state.triageStatuses.forEach(ts => qp.append('triage_status', ts))
   if (state.hasSecrets) qp.set('has_secrets', 'true')
   if (state.groupBy) qp.set('group_by', state.groupBy)
   if (state.dateFrom) qp.set('date_from', state.dateFrom)
@@ -84,6 +96,9 @@ export function usePastes() {
   const statsReqId = useRef(0)
   const runningRef = useRef(false)
   const reindexTriggeredRef = useRef(false)
+  // Last applied filter state, so background refreshes (e.g. after an index
+  // run) keep the active filters instead of silently resetting the counters.
+  const lastFilterRef = useRef<FilterState>({ page: 1 })
 
   const fetchPastes = useCallback(async (state: FilterState) => {
     const reqId = ++pastesReqId.current
@@ -140,6 +155,7 @@ export function usePastes() {
 
   const applyFilters = useCallback((state: FilterState) => {
     if (runningRef.current) return
+    lastFilterRef.current = state
     if (state.groupBy) {
       fetchGroupedPastes(state)
     } else {
@@ -206,14 +222,14 @@ export function usePastes() {
             if (t) setTypes(t)
             if (st) setSecretTypes(st)
             if (v) setVersion(v.version)
-            fetchPastes({ page: 1 })
-            fetchStats({})
+            fetchPastes({ ...lastFilterRef.current, page: 1 })
+            fetchStats(lastFilterRef.current)
           }
         }
         // Index just completed — refresh data and show result
         if (justFinished && dataLoaded) {
-          fetchPastes({ page: 1 })
-          fetchStats({})
+          fetchPastes({ ...lastFilterRef.current, page: 1 })
+          fetchStats(lastFilterRef.current)
           Promise.all([
             fetchJson<SourceCount[]>(`${API_BASE}/sources`),
             fetchJson<TypeCount[]>(`${API_BASE}/types`),
@@ -270,4 +286,25 @@ export function usePastes() {
 
 export async function fetchPasteDetail(id: string): Promise<PasteResult | null> {
   return fetchJson<PasteResult>(`${API_BASE}/pastes/${encodeURIComponent(id)}`)
+}
+
+export interface TriageState {
+  triage_status: string
+  triage_note: string
+  triage_reviewer: string
+  triage_updated_at: string | null
+}
+
+export async function updateTriage(
+  id: string,
+  payload: { status?: string; note?: string },
+): Promise<TriageState> {
+  const res = await fetch(`${API_BASE}/pastes/${encodeURIComponent(id)}/triage`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+  return data as TriageState
 }

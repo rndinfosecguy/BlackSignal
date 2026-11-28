@@ -85,6 +85,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
   const [activeSources, setActiveSources] = useState<string[]>([])
   const [activeTypes, setActiveTypes] = useState<string[]>([])
   const [activeSecretTypes, setActiveSecretTypes] = useState<string[]>([])
+  const [activeTriageStatuses, setActiveTriageStatuses] = useState<string[]>([])
   const [hasSecrets, setHasSecrets] = useState(false)
   const [groupBy, setGroupBy] = useState('')
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -150,6 +151,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
     const nextSources = overrides.sources !== undefined ? overrides.sources : activeSources
     const nextTypes = overrides.types !== undefined ? overrides.types : activeTypes
     const nextSecretTypes = overrides.secretTypes !== undefined ? overrides.secretTypes : activeSecretTypes
+    const nextTriageStatuses = overrides.triageStatuses !== undefined ? overrides.triageStatuses : activeTriageStatuses
     const nextHasSecrets = overrides.hasSecrets !== undefined ? overrides.hasSecrets : hasSecrets
     const nextGroupBy = overrides.groupBy !== undefined ? overrides.groupBy : groupBy
     const nextDateFrom = overrides.dateFrom !== undefined ? overrides.dateFrom : dateFrom
@@ -160,6 +162,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
       overrides.sources !== undefined ||
       overrides.types !== undefined ||
       overrides.secretTypes !== undefined ||
+      overrides.triageStatuses !== undefined ||
       overrides.hasSecrets !== undefined ||
       overrides.groupBy !== undefined ||
       overrides.dateFrom !== undefined ||
@@ -170,6 +173,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
       sources: nextSources,
       types: nextTypes,
       secretTypes: nextSecretTypes,
+      triageStatuses: nextTriageStatuses,
       hasSecrets: nextHasSecrets,
       groupBy: nextGroupBy,
       dateFrom: nextDateFrom,
@@ -192,17 +196,18 @@ function MainApp({ username, onLogout }: MainAppProps) {
         fetchSecretTypes()
       }
     }
-  }, [applyFilters, fetchSources, fetchTypes, fetchSecretTypes, query, activeSources, activeTypes, activeSecretTypes, hasSecrets, groupBy, dateFrom, dateTo, page])
+  }, [applyFilters, fetchSources, fetchTypes, fetchSecretTypes, query, activeSources, activeTypes, activeSecretTypes, activeTriageStatuses, hasSecrets, groupBy, dateFrom, dateTo, page])
 
   const handleSearch = useCallback((q: string) => {
     setQuery(q)
     applyAll({ q })
   }, [applyAll])
 
-  const handleFiltersBatch = useCallback((filters: { sources?: string[]; types?: string[]; secretTypes?: string[]; hasSecrets?: boolean; dateFrom?: string; dateTo?: string }) => {
+  const handleFiltersBatch = useCallback((filters: { sources?: string[]; types?: string[]; secretTypes?: string[]; triageStatuses?: string[]; hasSecrets?: boolean; dateFrom?: string; dateTo?: string }) => {
     if (filters.sources !== undefined) setActiveSources(filters.sources)
     if (filters.types !== undefined) setActiveTypes(filters.types)
     if (filters.secretTypes !== undefined) setActiveSecretTypes(filters.secretTypes)
+    if (filters.triageStatuses !== undefined) setActiveTriageStatuses(filters.triageStatuses)
     if (filters.hasSecrets !== undefined) setHasSecrets(filters.hasSecrets)
     if (filters.dateFrom !== undefined) setDateFrom(filters.dateFrom)
     if (filters.dateTo !== undefined) setDateTo(filters.dateTo)
@@ -210,11 +215,12 @@ function MainApp({ username, onLogout }: MainAppProps) {
       sources: filters.sources !== undefined ? filters.sources : activeSources,
       types: filters.types !== undefined ? filters.types : activeTypes,
       secretTypes: filters.secretTypes !== undefined ? filters.secretTypes : activeSecretTypes,
+      triageStatuses: filters.triageStatuses !== undefined ? filters.triageStatuses : activeTriageStatuses,
       hasSecrets: filters.hasSecrets !== undefined ? filters.hasSecrets : hasSecrets,
       dateFrom: filters.dateFrom !== undefined ? filters.dateFrom : dateFrom,
       dateTo: filters.dateTo !== undefined ? filters.dateTo : dateTo,
     })
-  }, [applyAll, activeSources, activeTypes, activeSecretTypes, hasSecrets, dateFrom, dateTo])
+  }, [applyAll, activeSources, activeTypes, activeSecretTypes, activeTriageStatuses, hasSecrets, dateFrom, dateTo])
 
   const handleSecretTypeToggle = useCallback((st: string) => {
     const next = activeSecretTypes.includes(st)
@@ -239,6 +245,17 @@ function MainApp({ username, onLogout }: MainAppProps) {
     setHasSecrets(next)
     applyAll({ hasSecrets: next })
   }, [applyAll, hasSecrets])
+
+  const handleTriageChange = useCallback((next: string[]) => {
+    setActiveTriageStatuses(next)
+    applyAll({ triageStatuses: next })
+  }, [applyAll])
+
+  const toggleNeedsTriage = useCallback(() => {
+    const next = activeTriageStatuses.length === 1 && activeTriageStatuses[0] === 'new' ? [] : ['new']
+    setActiveTriageStatuses(next)
+    applyAll({ triageStatuses: next })
+  }, [applyAll, activeTriageStatuses])
 
   const handlePageChange = useCallback((p: number) => {
     applyAll({ page: p })
@@ -272,6 +289,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
     activeSources.forEach(s => params.push(`source=${encodeURIComponent(s)}`))
     activeTypes.forEach(t => params.push(`content_type=${encodeURIComponent(t)}`))
     activeSecretTypes.forEach(st => params.push(`secret_type=${encodeURIComponent(st)}`))
+    activeTriageStatuses.forEach(ts => params.push(`triage_status=${encodeURIComponent(ts)}`))
     if (hasSecrets) params.push('has_secrets=true')
     if (dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`)
     if (dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`)
@@ -408,12 +426,12 @@ function MainApp({ username, onLogout }: MainAppProps) {
           </header>
 
           <div className="flex items-center gap-0 mb-5 border-b border-[#222222]">
-            <button onClick={() => { fetchStats({}); setCurrentTab('dashboard') }}
+            <button onClick={() => { setCurrentTab('dashboard') }}
               className={`text-sm px-4 py-2 ${currentTab === 'dashboard' ? 'text-[#ff004d] border-b-2 border-[#ff004d]' : 'text-[#555555] hover:text-[#777777]'} transition-all cursor-pointer`}>
               Dashboard
             </button>
             <button onClick={() => {
-                fetchStats({ q: query, sources: activeSources, types: activeTypes, secretTypes: activeSecretTypes.length > 0 ? activeSecretTypes : undefined, hasSecrets, dateFrom, dateTo })
+                fetchStats({ q: query, sources: activeSources, types: activeTypes, secretTypes: activeSecretTypes.length > 0 ? activeSecretTypes : undefined, triageStatuses: activeTriageStatuses.length > 0 ? activeTriageStatuses : undefined, hasSecrets, dateFrom, dateTo })
                 fetch('/api/llm/config').then(r => r.json()).then(d => setLlmConfigured(d.configured)).catch(() => {})
                 setCurrentTab('pastes')
               }}
@@ -449,6 +467,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
                 activeSources={activeSources}
                 activeTypes={activeTypes}
                 activeSecretTypes={activeSecretTypes}
+                activeTriageStatuses={activeTriageStatuses}
                 hasSecrets={hasSecrets}
                 dateFrom={dateFrom}
                 dateTo={dateTo}
@@ -456,6 +475,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
                 onTypesChange={(t) => { setActiveTypes(t); applyAll({ types: t }) }}
                 onSecretTypeToggle={handleSecretTypeToggle}
                 onSecretTypesBatch={handleSecretTypesBatch}
+                onTriageChange={handleTriageChange}
                 onFiltersBatch={handleFiltersBatch}
                 onSecretTypeClear={handleSecretTypeClear}
                 onHasSecretsToggle={handleHasSecretsToggle}
@@ -481,14 +501,19 @@ function MainApp({ username, onLogout }: MainAppProps) {
                     className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${groupBy === 'content_type' ? 'border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5' : 'border-[#222222] text-[#555555]'}`}>
                     Type
                   </button>
+                  <span className="text-[#333333] text-xs mx-1">|</span>
+                  <button onClick={toggleNeedsTriage}
+                    className={`text-xs px-3 py-1.5 rounded-md border transition-all cursor-pointer ${activeTriageStatuses.length === 1 && activeTriageStatuses[0] === 'new' ? 'border-[#ff004d] text-[#ff004d] bg-[#ff004d]/5' : 'border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888]'}`}>
+                    Needs triage
+                  </button>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs text-[#444444] mr-1">Export</span>
-                  <a href={`/api/pastes/export?format=csv${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSources.map(s => `&source=${encodeURIComponent(s)}`).join('')}${activeTypes.map(t => `&content_type=${encodeURIComponent(t)}`).join('')}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
+                  <a href={`/api/pastes/export?format=csv${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSources.map(s => `&source=${encodeURIComponent(s)}`).join('')}${activeTypes.map(t => `&content_type=${encodeURIComponent(t)}`).join('')}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${activeTriageStatuses.map(ts => `&triage_status=${encodeURIComponent(ts)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
                     className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888] transition-all cursor-pointer no-underline">
                     CSV
                   </a>
-                  <a href={`/api/pastes/export?format=json${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSources.map(s => `&source=${encodeURIComponent(s)}`).join('')}${activeTypes.map(t => `&content_type=${encodeURIComponent(t)}`).join('')}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
+                  <a href={`/api/pastes/export?format=json${query ? `&q=${encodeURIComponent(query)}` : ''}${activeSources.map(s => `&source=${encodeURIComponent(s)}`).join('')}${activeTypes.map(t => `&content_type=${encodeURIComponent(t)}`).join('')}${hasSecrets ? '&has_secrets=true' : ''}${activeSecretTypes.map(st => `&secret_type=${encodeURIComponent(st)}`).join('')}${activeTriageStatuses.map(ts => `&triage_status=${encodeURIComponent(ts)}`).join('')}${dateFrom ? `&date_from=${encodeURIComponent(dateFrom)}` : ''}${dateTo ? `&date_to=${encodeURIComponent(dateTo)}` : ''}`}
                     className="text-xs px-3 py-1.5 rounded-md border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-[#888888] transition-all cursor-pointer no-underline">
                     JSON
                   </a>
@@ -589,11 +614,30 @@ function MainApp({ username, onLogout }: MainAppProps) {
                 </div>
               </div>
 
+              <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
+                <div className="text-xs text-[#888888] font-medium uppercase tracking-wider mb-3">Triage progress</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { id: 'new', label: 'Needs triage', value: stats.unreviewed_all ?? stats.unreviewed, color: '#888888' },
+                    { id: 'reviewed', label: 'Reviewed', value: stats.reviewed_all ?? stats.reviewed, color: '#00ff41' },
+                    { id: 'false_positive', label: 'False positive', value: stats.false_positive_all ?? stats.false_positive, color: '#ffd700' },
+                    { id: 'escalated', label: 'Escalated', value: stats.escalated_all ?? stats.escalated, color: '#ff004d' },
+                  ].map(t => (
+                    <button key={t.id}
+                      onClick={() => { setActiveTriageStatuses([t.id]); applyAll({ triageStatuses: [t.id] }); setCurrentTab('pastes') }}
+                      className="text-left rounded-md border border-[#222222] px-3 py-2 hover:border-[#444444] hover:bg-[#181818] transition-all cursor-pointer">
+                      <div className="text-lg font-semibold" style={{ color: t.color }}>{(t.value ?? 0).toLocaleString()}</div>
+                      <div className="text-[10px] text-[#666666]">{t.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
                   <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Sources</div>
                   {sources.filter(s => s.count > 0).slice(0, 10).map(s => {
-                    const pct = stats.total > 0 ? (s.count / stats.total * 100) : 0
+                    const pct = stats.total_all && stats.total_all > 0 ? (s.count / stats.total_all * 100) : 0
                     return (
                       <div key={s.source} className="flex items-center gap-2 mb-1.5">
                         <span style={{ backgroundColor: sourceColor(s.source) }} className="w-2 h-2 rounded-full shrink-0" />
@@ -610,7 +654,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
                 <div className="bg-[#131313] border border-[#222222] rounded-lg p-4">
                   <div className="text-xs text-[#888888] font-medium mb-3 uppercase tracking-wider">Content Types</div>
                   {types.filter(t => t.count > 0).slice(0, 10).map(t => {
-                    const pct = stats.total > 0 ? (t.count / stats.total * 100) : 0
+                    const pct = stats.total_all && stats.total_all > 0 ? (t.count / stats.total_all * 100) : 0
                     return (
                       <div key={t.content_type} className="flex items-center gap-2 mb-1.5">
                         <span className="w-2 h-2 rounded-full bg-[#555555]" />
@@ -690,7 +734,7 @@ function MainApp({ username, onLogout }: MainAppProps) {
         </div>
       )}
 
-      {detailId && <PasteDetail id={detailId} onClose={() => setDetailId(null)} />}
+      {detailId && <PasteDetail id={detailId} onClose={() => setDetailId(null)} onTriageSaved={() => applyAll({})} />}
 
       {/* LLM Report cancel confirmation */}
       {confirmLlmCancel && (

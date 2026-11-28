@@ -11,7 +11,7 @@ import php from 'highlight.js/lib/languages/php'
 import java from 'highlight.js/lib/languages/java'
 import c from 'highlight.js/lib/languages/c'
 import markdown_h from 'highlight.js/lib/languages/markdown'
-import { fetchPasteDetail } from '../hooks/usePastes'
+import { fetchPasteDetail, updateTriage } from '../hooks/usePastes'
 import { formatSize, splitHighlighted, renderMarkdown } from '../lib/utils'
 import { lockScroll } from '../lib/scrollLock'
 
@@ -43,16 +43,34 @@ interface PasteDetailData {
   content_type: string; size: number; has_passwords: boolean
   has_secrets: boolean; secrets_detail: Secret[] | null; first_seen: string
   fully_scanned: boolean
+  modified_at?: string | null
+  triage_status?: string
+  triage_note?: string
+  triage_reviewer?: string
+  triage_updated_at?: string | null
 }
-interface Props { id: string; onClose: () => void }
+interface Props { id: string; onClose: () => void; onTriageSaved?: () => void }
 
-export default function PasteDetail({ id, onClose }: Props) {
+const TRIAGE_OPTIONS = [
+  { id: 'new', label: 'New', color: '#888888' },
+  { id: 'reviewed', label: 'Reviewed', color: '#00ff41' },
+  { id: 'false_positive', label: 'False positive', color: '#ffd700' },
+  { id: 'escalated', label: 'Escalated', color: '#ff004d' },
+]
+
+export default function PasteDetail({ id, onClose, onTriageSaved }: Props) {
   const [paste, setPaste] = useState<PasteDetailData | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [copied, setCopied] = useState(false)
   const [contentVisible, setContentVisible] = useState(true)
   const fetchReqId = useRef(0)
+
+  // Triage state
+  const [triageStatus, setTriageStatus] = useState('new')
+  const [triageNote, setTriageNote] = useState('')
+  const [triageSaving, setTriageSaving] = useState(false)
+  const [triageMsg, setTriageMsg] = useState<string | null>(null)
 
   // LLM state
   const [llmConfigured, setLlmConfigured] = useState(false)
@@ -79,6 +97,9 @@ export default function PasteDetail({ id, onClose }: Props) {
       if (!p) setFetchError(true)
       else if (p.secrets_detail && p.secrets_detail.length > 0) setContentVisible(false)
       else setContentVisible(true)
+      setTriageStatus(p?.triage_status || 'new')
+      setTriageNote(p?.triage_note || '')
+      setTriageMsg(null)
     }).catch(() => {
       if (fetchReqId.current !== reqId) return
       setLoading(false)
@@ -146,6 +167,36 @@ export default function PasteDetail({ id, onClose }: Props) {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
+
+  const handleSaveTriage = async (reset = false) => {
+    if (!paste || triageSaving) return
+    const status = reset ? 'new' : triageStatus
+    const note = reset ? '' : triageNote
+    setTriageSaving(true)
+    setTriageMsg(null)
+    try {
+      const updated = await updateTriage(id, { status, note })
+      setPaste(prev => (prev ? { ...prev, ...updated } : prev))
+      setTriageStatus(updated.triage_status)
+      setTriageNote(updated.triage_note)
+      setTriageMsg(reset ? 'Reset to new' : 'Saved')
+      onTriageSaved?.()
+      setTimeout(() => setTriageMsg(null), 2500)
+    } catch (e: unknown) {
+      setTriageMsg(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setTriageSaving(false)
+    }
+  }
+
+  // modified_at is stored as epoch seconds; triage_updated_at is ISO-8601.
+  const changedSinceTriage = (() => {
+    if (!paste?.triage_updated_at || !paste?.modified_at) return false
+    const raw = paste.modified_at
+    const modMs = /^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw)
+    const triMs = Date.parse(paste.triage_updated_at)
+    return Number.isFinite(modMs) && Number.isFinite(triMs) && modMs > triMs
+  })()
 
   const highlighted = useMemo(() => {
     if (!paste || !contentVisible) return ''
@@ -225,6 +276,57 @@ export default function PasteDetail({ id, onClose }: Props) {
             <button onClick={onClose} className="text-[#666666] hover:text-[#ff004d] text-lg transition-all leading-none">&times;</button>
           </div>
         </div>
+
+        {paste && (
+          <div className="p-4 border-b border-[#222222] bg-[#0d0d0d]">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-[#ff004d] font-medium">Triage</div>
+              <div className="text-[10px] text-[#555555]">
+                {paste.triage_status && paste.triage_status !== 'new' && paste.triage_reviewer
+                  ? `${paste.triage_reviewer} · ${paste.triage_updated_at ? new Date(paste.triage_updated_at).toLocaleString() : 'just now'}`
+                  : 'Not reviewed'}
+                {changedSinceTriage && (
+                  <span className="text-[#ffd700]/80 ml-2">content changed since triage</span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {TRIAGE_OPTIONS.map(opt => {
+                const active = triageStatus === opt.id
+                return (
+                  <button key={opt.id} onClick={() => setTriageStatus(opt.id)}
+                    className="text-[11px] px-2.5 py-1 rounded-md border transition-all cursor-pointer"
+                    style={{
+                      borderColor: active ? opt.color : '#222222',
+                      color: active ? opt.color : '#666666',
+                      backgroundColor: active ? `${opt.color}1a` : 'transparent',
+                    }}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+            <textarea
+              value={triageNote}
+              onChange={e => setTriageNote(e.target.value)}
+              maxLength={2000}
+              rows={2}
+              placeholder="Note (optional)"
+              className="w-full bg-[#0d0d0d] border border-[#222222] rounded-md px-2.5 py-1.5 text-xs text-[#e8e8e8] outline-none focus:border-[#ff004d] transition-colors resize-y"
+            />
+            <div className="flex items-center gap-2 mt-2">
+              <button onClick={() => handleSaveTriage(false)} disabled={triageSaving}
+                className="text-[11px] px-3 py-1 rounded-md border border-[#ff004d]/40 text-[#ff004d] hover:bg-[#ff004d]/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+                {triageSaving ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={() => handleSaveTriage(true)} disabled={triageSaving}
+                className="text-[11px] px-3 py-1 rounded-md border border-[#222222] text-[#555555] hover:text-[#666666] transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
+                Reset
+              </button>
+              {triageMsg && <span className="text-[11px] text-[#888888]">{triageMsg}</span>}
+            </div>
+          </div>
+        )}
 
         {paste && paste.secrets_detail && paste.secrets_detail.length > 0 && (
           <div className="bg-[#0d0d0d] p-4 border-b border-[#222222]">

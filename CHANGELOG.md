@@ -6,6 +6,53 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.17.0] — 2026-11-28
+
+### Added
+- **Triage workflow.** Every paste now carries a review state: `new`, `reviewed`,
+  `false_positive`, or `escalated`, plus an optional note, the reviewer, and a timestamp.
+  - Paste cards show a colored status badge and a note indicator.
+  - The paste detail modal has a **Triage** panel with status buttons, a note field,
+    and Save/Reset. It also warns when the paste was modified after it was last triaged.
+  - The `+ Add filter` overlay has a **Triage** category, and the Pastes toolbar has a
+    one-click **Needs triage** shortcut.
+  - The Dashboard shows per-status counts that link straight into the filtered list.
+- **API:** `PATCH /api/pastes/{id}/triage` (body `{ status?, note? }`; reviewer comes from
+  the session, note capped at 2000 chars). `triage_status` is a repeatable filter on
+  `/api/pastes`, `/api/pastes/export`, `/api/stats`, and `/api/llm/report`. Stats return
+  `unreviewed`, `reviewed`, `false_positive`, `escalated` counts (plus `*_all`).
+  CSV/JSON exports include the triage columns.
+
+### Changed
+- **Triage survives re-indexing.** `upsert_paste()` updates content and detections only;
+  the triage columns are preserved exactly like `first_seen`. A `purge` reindex still
+  clears everything.
+- Schema migration adds the triage columns and two indexes in place, using the existing
+  `ALTER TABLE ... ADD COLUMN` pattern, so large databases migrate without a rebuild.
+- The Dashboard triage block reports overall counts (all pastes) so an active
+  `Needs triage` filter does not blank out the progress numbers.
+- **Secret-type counts are precomputed** in a small `secret_type_counts` table, maintained
+  on upsert/delete and rebuilt once for existing databases. `/api/secret-types` no longer
+  has to walk every paste row on a cold cache.
+- **Faster stats.** `/api/stats` and the distribution lists now read covering indexes
+  instead of scanning the whole `pastes` table (content included). On a large database a
+  cold stats request drops from seconds to milliseconds. Existing databases rebuild
+  `idx_pastes_stats`, `idx_pastes_source` and `idx_pastes_content_type` once on first
+  start (a few seconds on a 600 MB database).
+- **Much faster purge.** The destructive `DROP TABLE` step disables SQLite's
+  `secure_delete` pragma, which otherwise zeroes every freed page. On the 614 MB dev
+  database the drop went from ~37 s to ~4 s; the pragma is restored before reindexing.
+
+### Fixed
+- **Triage changes invalidate the stats cache immediately.** Marking a paste no longer
+  needs an index run before `/api/stats` and the Dashboard counters reflect it. Only the
+  stats cache is dropped; the more expensive distribution caches are left intact.
+- Switching to the Dashboard tab, or a background refresh after an index run, no longer
+  resets the top counters to global totals. The last applied filters (including triage)
+  are kept.
+
+---
+
 ## [1.16.3] — 2026-11-27
 
 ### Fixed
