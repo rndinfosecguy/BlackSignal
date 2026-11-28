@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from indexer import walk_pastes, detect_content_type
-from database import upsert_paste, get_indexed_ids, get_indexed_mtimes, delete_paste, get_conn
+from database import (upsert_paste, get_indexed_ids, get_indexed_mtimes,
+                      delete_paste, get_conn, get_stats, get_sources,
+                      get_content_types, get_secret_types, search_pastes)
 from detector import scan_content
 
 logger = logging.getLogger("blacksignal")
@@ -50,27 +52,26 @@ def set_index_running(running: bool, phase: str = ""):
 
 
 def _warm_os_cache():
-    """Run common SELECT queries to pull database pages into the OS filesystem cache.
-    Called at the end of every index run so that first-user interactions
-    (source filter, stats, type distribution) serve instantly."""
-    import time
+    """Run the queries the UI hits first so their pages are in the OS cache.
+
+    Called at the end of every index run. Uses the real data accessors rather
+    than hand-written SQL so the warm-up cannot drift from the endpoints. The
+    old full FTS count was removed: it cost hundreds of ms per run and did not
+    warm what normal searches use.
+    """
     try:
-        conn = get_conn()
         logger.info("Warming OS cache with common queries\u2026")
-        conn.execute("SELECT COUNT(*) FROM pastes").fetchone()
-        conn.execute("SELECT COUNT(*) FROM pastes WHERE has_secrets = 1").fetchone()
-        conn.execute("SELECT COUNT(*) FROM pastes WHERE has_passwords = 1").fetchone()
-        conn.execute("SELECT source, COUNT(*) AS cnt FROM pastes GROUP BY source ORDER BY cnt DESC").fetchall()
-        conn.execute("SELECT content_type, COUNT(*) AS cnt FROM pastes GROUP BY content_type ORDER BY cnt DESC").fetchall()
-        conn.execute("SELECT secret_types, COUNT(*) AS cnt FROM pastes WHERE secret_types != '' GROUP BY secret_types ORDER BY cnt DESC").fetchall()
-        sources = conn.execute("SELECT DISTINCT source FROM pastes").fetchall()
-        for row in sources:
-            conn.execute("SELECT COUNT(*) FROM pastes WHERE source = ?", (row["source"],)).fetchone()
-        conn.execute("SELECT count(*) FROM pastes_fts").fetchone()
-        # Warm the first_seen DESC index + recent rows (main pastes list query)
-        conn.execute("SELECT first_seen FROM pastes ORDER BY first_seen DESC LIMIT 50").fetchall()
-        # Warm COUNT(DISTINCT source) — used by get_stats()
-        conn.execute("SELECT COUNT(DISTINCT source) FROM pastes").fetchone()
+        # Global stats: covering index scan (idx_pastes_stats).
+        get_stats()
+        # Dashboard distributions.
+        get_sources()
+        get_content_types()
+        get_secret_types()
+        # First list page: row pages, paste_meta join and duplicate counts.
+        search_pastes(page=1, per_page=50)
+        # The queue users open first: unreviewed, priority-sorted.
+        search_pastes(triage_status=["new"], has_secrets=True,
+                      sort="priority", per_page=50)
         logger.info("Cache warm-up complete")
     except Exception:
         logger.exception("Cache warm-up failed (non-fatal)")

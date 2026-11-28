@@ -5,7 +5,8 @@ interface Props {
   id: string; filename: string; source: string; content_type: string; size: number
   has_passwords: boolean; has_secrets: boolean; secret_types: string[]; snippet: string
   first_seen: string
-  triage_status?: string; triage_note?: string
+  triage_status?: string; triage_note?: string; triage_auto?: number
+  duplicate_count?: number
   onClick: (id: string) => void
 }
 
@@ -23,7 +24,7 @@ const TRIAGE_BADGES: Record<string, { label: string; color: string }> = {
 }
 
 export default memo(function PasteCard(props: Props) {
-  const { id, filename, source, content_type, size, has_passwords, has_secrets, secret_types, snippet, first_seen, triage_status, triage_note, onClick } = props
+  const { id, filename, source, content_type, size, has_passwords, has_secrets, secret_types, snippet, first_seen, triage_status, triage_note, triage_auto, duplicate_count, onClick } = props
   const secretTypes = (secret_types || []).slice(0, 3)
   const badge = TRIAGE_BADGES[triage_status || ''] || null
 
@@ -51,6 +52,14 @@ export default memo(function PasteCard(props: Props) {
               {badge.label}
             </span>
           )}
+          {triage_auto ? (
+            <span className="text-[10px] text-[#00e5ff]" title="Auto-applied from identical paste">auto</span>
+          ) : null}
+          {duplicate_count && duplicate_count > 0 ? (
+            <span className="text-[10px] text-[#666666]" title={`${duplicate_count}${duplicate_count >= 100 ? '+' : ''} identical paste(s)`}>
+              &times;{duplicate_count}{duplicate_count >= 100 ? '+' : ''}
+            </span>
+          ) : null}
           {triage_note && triage_note.length > 0 && (
             <span className="text-[11px] text-[#666666]" title={triage_note}>&#9998;</span>
           )}

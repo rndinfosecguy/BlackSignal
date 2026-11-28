@@ -9,6 +9,7 @@ interface Props {
   sources: SourceCount[]; types: TypeCount[]; secretTypes: SecretTypeCount[]
   activeSources: string[]; activeTypes: string[]; activeSecretTypes: string[]
   activeTriageStatuses: string[]
+  stale: boolean
   hasSecrets: boolean
   dateFrom: string; dateTo: string
   onSourcesChange: (s: string[]) => void
@@ -16,7 +17,8 @@ interface Props {
   onSecretTypeToggle: (st: string) => void
   onSecretTypesBatch: (st: string[]) => void
   onTriageChange: (t: string[]) => void
-  onFiltersBatch: (filters: { sources?: string[]; types?: string[]; secretTypes?: string[]; triageStatuses?: string[]; hasSecrets?: boolean; dateFrom?: string; dateTo?: string }) => void
+  onStaleToggle: () => void
+  onFiltersBatch: (filters: { sources?: string[]; types?: string[]; secretTypes?: string[]; triageStatuses?: string[]; stale?: boolean; hasSecrets?: boolean; dateFrom?: string; dateTo?: string }) => void
   onSecretTypeClear: () => void
   onHasSecretsToggle: () => void
   onDateFromChange: (d: string) => void
@@ -57,7 +59,7 @@ const Pill = ({ label, dotColor, onRemove, onClick }: {
   </div>
 )
 
-export default function FilterChips({ sources, types, secretTypes, activeSources, activeTypes, activeSecretTypes, activeTriageStatuses, hasSecrets, dateFrom, dateTo, onSourcesChange, onTypesChange, onSecretTypeToggle, onSecretTypesBatch, onTriageChange, onSecretTypeClear, onHasSecretsToggle, onDateFromChange, onDateToChange, onFiltersBatch }: Props) {
+export default function FilterChips({ sources, types, secretTypes, activeSources, activeTypes, activeSecretTypes, activeTriageStatuses, stale, hasSecrets, dateFrom, dateTo, onSourcesChange, onTypesChange, onSecretTypeToggle, onSecretTypesBatch, onTriageChange, onStaleToggle, onSecretTypeClear, onHasSecretsToggle, onDateFromChange, onDateToChange, onFiltersBatch }: Props) {
   const topTypes = useMemo(() => types.slice(0, 12), [types])
 
   const [showOverlay, setShowOverlay] = useState(false)
@@ -69,6 +71,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
     types: [...activeTypes],
     secretTypes: [...activeSecretTypes],
     triageStatuses: [...activeTriageStatuses],
+    stale: stale,
     hasSecrets: hasSecrets,
     dateFrom: dateFrom,
     dateTo: dateTo,
@@ -82,6 +85,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
     p.types = [...activeTypes]
     p.secretTypes = [...activeSecretTypes]
     p.triageStatuses = [...activeTriageStatuses]
+    p.stale = stale
     p.hasSecrets = hasSecrets
     p.dateFrom = dateFrom
     p.dateTo = dateTo
@@ -97,6 +101,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
       types: [...p.types],
       secretTypes: [...p.secretTypes],
       triageStatuses: [...p.triageStatuses],
+      stale: p.stale,
       hasSecrets: p.hasSecrets,
       dateFrom: p.dateFrom,
       dateTo: p.dateTo,
@@ -137,6 +142,9 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
       filterId: 'triage',
     })
   })
+  if (stale) {
+    pills.push({ key: 'stale', label: 'Changed since triage', dotColor: '#ffd700', onRemove: () => onStaleToggle(), filterId: 'triage' })
+  }
   if (dateFrom || dateTo) {
     const dl = dateFrom && dateTo ? `${dateFrom} to ${dateTo}` : dateFrom || dateTo || ''
     pills.push({ key: 'date', label: dl, dotColor: '#ff004d', onRemove: () => { onDateFromChange(''); onDateToChange('') }, filterId: 'date' })
@@ -181,7 +189,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
                   { id: 'source', label: 'Source', active: pending.current.sources.length, color: '#ff004d' },
                   { id: 'type', label: 'Type', active: pending.current.types.length, color: '#ff004d' },
                   { id: 'secrets', label: 'Secrets', active: (pending.current.hasSecrets || pending.current.secretTypes.length) ? 1 : 0, color: '#ff004d' },
-                  { id: 'triage', label: 'Triage', active: pending.current.triageStatuses.length, color: '#ff004d' },
+                  { id: 'triage', label: 'Triage', active: (pending.current.triageStatuses.length || pending.current.stale) ? 1 : 0, color: '#ff004d' },
                   { id: 'date', label: 'Date range', active: (pending.current.dateFrom || pending.current.dateTo) ? 1 : 0, color: '#ff004d' },
                 ].map(cat => (
                   <button key={cat.id} onClick={() => setOverlayView(cat.id)}
@@ -191,7 +199,7 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
                       {cat.id === 'source' ? (cat.active > 0 ? `${cat.active} selected` : 'Any source') : 
                        cat.id === 'type' ? (cat.active > 0 ? `${cat.active} selected` : 'Any type') :
                        cat.id === 'secrets' ? (cat.active > 0 ? 'Active' : 'Inactive') :
-                       cat.id === 'triage' ? (cat.active > 0 ? `${cat.active} selected` : 'Any status') :
+                       cat.id === 'triage' ? (cat.active > 0 ? `${pending.current.triageStatuses.length || 'stale'} selected` : 'Any status') :
                        cat.id === 'date' ? ((pending.current.dateFrom || pending.current.dateTo) ? `${pending.current.dateFrom || '...'} to ${pending.current.dateTo || '...'}` : 'Not set') : ''}
                     </div>
                   </button>
@@ -273,6 +281,8 @@ export default function FilterChips({ sources, types, secretTypes, activeSources
                       }} />
                   )
                 })}
+                <Chip label="Changed since triage" dotColor="#ffd700" active={pending.current.stale}
+                  onClick={() => { pending.current.stale = !pending.current.stale; setPendingVer(pendingVer + 1) }} />
               </div>
             )}
 

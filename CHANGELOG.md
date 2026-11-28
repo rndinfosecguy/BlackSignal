@@ -6,6 +6,44 @@ Dates are based on commit timestamps (UTC+1).
 
 ---
 
+## [1.18.0] — 2026-11-28
+
+### Added
+- **Identical-paste detection.** Pastes with the same content are grouped via a
+  SHA-256 hash. Cards show how many copies exist, and the detail view can apply a
+  decision to every identical paste at once.
+- **Auto-copy to identical pastes.** When a new copy of an already triaged paste is
+  indexed, the decision (status, note, reviewer) is applied automatically. The detail
+  view marks it as auto-applied and names the source paste; changing it manually clears
+  the marker.
+- **Priority queue.** Each paste gets a deterministic 0-100 priority from its detected
+  categories (private keys highest, then credentials/API tokens, then PII). The Pastes
+  toolbar has a **Priority / Newest** sort, and **Needs triage** selects all `new` pastes,
+  sorted by priority (secret-bearing pastes float to the top).
+- **Changed since triage filter.** Surfaces pastes that were re-indexed with different
+  content after they were reviewed.
+- **Review progress** bar on the dashboard triage block.
+- **API:** `POST /api/pastes/{id}/triage/identical` applies a decision to all identical
+  pastes. `/api/pastes`, `/api/stats`, `/api/pastes/export` and `/api/llm/report` accept
+  `stale=true`; `/api/pastes` also accepts `sort=priority`. List/detail responses include
+  `duplicate_count`, `triage_auto` and `triage_source`.
+
+### Changed
+- Derived hash/priority/stale data lives in a small `paste_meta` side table. It is
+  backfilled in the background in batches for databases indexed before this release,
+  so existing rows are not rewritten and startup is not blocked.
+- Stale detection compares content hashes at index time instead of parsing date strings
+  in SQL.
+- The post-index cache warm-up now runs the real stats/list/queue accessors (including
+  `paste_meta`) instead of hand-written SQL, and no longer performs a full FTS count,
+  which cost hundreds of milliseconds per index run and did not warm search pages.
+- The paste detail triage controls were redesigned: a segmented decision bar with icons,
+  an auto-growing note composer, dirty-state Save/Reset buttons, a status badge in the
+  modal header, and a save confirmation that offers "just this paste" or "all identical
+  copies" (only shown when the paste has duplicates).
+
+---
+
 ## [1.17.0] — 2026-11-28
 
 ### Added

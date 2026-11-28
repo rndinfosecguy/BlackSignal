@@ -16,7 +16,7 @@ import uvicorn
 
 from database import init_db, build_filter_conditions, search_pastes, search_pastes_grouped, export_pastes, get_paste_by_id, get_sources, \
     get_content_types, get_secret_types, get_stats, get_stats_filtered, clear_all_data, DB_PATH, count_pastes, \
-    QueryError, validate_fts, update_triage, TRIAGE_STATUSES
+    QueryError, validate_fts, update_triage, apply_triage_to_identical, backfill_meta, TRIAGE_STATUSES
 from scheduler import index_all_pastes, start_scheduler, get_index_progress, get_last_reindex_result, set_index_running, get_scheduler_info, reschedule_interval
 import llm
 import reports
@@ -101,7 +101,7 @@ def _static_path(root: str, full_path: str) -> str | None:
 # lru_cache bounded by the number of distinct filter combinations is safe.
 
 @lru_cache(maxsize=256)
-def _get_stats_cached(query, source, content_type, has_secrets, secret_types, date_from, date_to, triage_status=()):
+def _get_stats_cached(query, source, content_type, has_secrets, secret_types, date_from, date_to, triage_status=(), stale=False):
     conditions, params = build_filter_conditions(
         query=query,
         source=source,
@@ -111,6 +111,7 @@ def _get_stats_cached(query, source, content_type, has_secrets, secret_types, da
         date_from=date_from,
         date_to=date_to,
         triage_status=triage_status,
+        stale=stale,
     )
     if conditions:
         return get_stats_filtered(conditions, params)
@@ -190,6 +191,29 @@ async def lifespan(app: FastAPI):
             logger.exception("Stats warm-up failed (non-fatal)")
 
     threading.Thread(target=_warm_stats, daemon=True).start()
+
+    # Hash/priority metadata for rows indexed before paste_meta existed. Runs
+    # after the initial index pass and in small batches so it never competes
+    # with indexing for the write lock.
+    def _backfill_meta():
+        try:
+            while get_index_progress().get("running"):
+                time.sleep(2)
+            total = 0
+            while True:
+                n = backfill_meta()
+                if not n:
+                    break
+                total += n
+                if total % 5000 < n:
+                    logger.info("Metadata backfill: %d pastes processed", total)
+                time.sleep(0.05)
+            if total:
+                logger.info("Metadata backfill complete: %d pastes", total)
+        except Exception:
+            logger.exception("Metadata backfill failed (non-fatal)")
+
+    threading.Thread(target=_backfill_meta, daemon=True).start()
 
     threading.Thread(target=index_all_pastes, daemon=True).start()
     start_scheduler(settings.get_interval(REINDEX_INTERVAL))
@@ -336,6 +360,7 @@ def api_stats(
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     triage_status: list[str] = Query([], description="Triage status filter (OR)"),
+    stale: bool = Query(False, description="Only pastes changed since they were triaged"),
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
@@ -349,6 +374,7 @@ def api_stats(
             date_from,
             date_to,
             tuple(triage_status),
+            stale,
         )
     except QueryError:
         raise HTTPException(status_code=400, detail="Invalid search query")
@@ -384,6 +410,8 @@ def api_search(
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     triage_status: list[str] = Query([], description="Triage status filter (OR)"),
+    stale: bool = Query(False, description="Only pastes changed since they were triaged"),
+    sort: str = Query(None, description="Sort order: 'priority' or default newest"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     group_by: str = Query(None, description="Group results by column (source, content_type)"),
@@ -402,6 +430,7 @@ def api_search(
                 date_from=date_from,
                 date_to=date_to,
                 triage_status=triage_status or None,
+                stale=stale,
             )
         return search_pastes(
             query=normalize_fts_query(q),
@@ -414,6 +443,8 @@ def api_search(
             date_from=date_from,
             date_to=date_to,
             triage_status=triage_status or None,
+            stale=stale,
+            sort=sort,
         )
     except QueryError:
         raise HTTPException(status_code=400, detail="Invalid search query")
@@ -428,6 +459,7 @@ def api_pastes_export(
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     triage_status: list[str] = Query([], description="Triage status filter (OR)"),
+    stale: bool = Query(False, description="Only pastes changed since they were triaged"),
     include_content: str = Query("false", description="Include full paste content ('true' or 'false')"),
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
@@ -451,7 +483,8 @@ def api_pastes_export(
                          has_secrets=has_sec, secret_types=secret_types,
                          include_content=inc_content,
                          date_from=date_from, date_to=date_to,
-                         triage_status=triage_status or None)
+                         triage_status=triage_status or None,
+                         stale=stale)
 
     if format == "json":
         def json_stream():
@@ -557,6 +590,24 @@ def api_paste_triage(paste_id: str, request: Request, body: dict = Body(...)):
     # the stats cache is dropped.
     clear_stats_cache()
     return updated
+
+
+@app.post("/api/pastes/{paste_id}/triage/identical")
+def api_paste_triage_identical(paste_id: str, request: Request, body: dict = Body(...)):
+    status = body.get("status")
+    note = body.get("note", "")
+    if status not in TRIAGE_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid triage status")
+    note = str(note)
+    if len(note) > 2000:
+        raise HTTPException(status_code=400, detail="Note is too long (max 2000 characters)")
+
+    reviewer = getattr(request.state, "user", None) or "system"
+    updated = apply_triage_to_identical(paste_id, status=status, note=note, reviewer=reviewer)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Paste or content hash not found")
+    clear_stats_cache()
+    return {"updated": updated}
 
 
 @app.get("/api/version")
@@ -731,6 +782,7 @@ def api_llm_report(
     has_secrets: str = Query(None, description="Only pastes with secrets ('true' or 'false')"),
     secret_type: list[str] = Query([], description="Secret type filters (OR)"),
     triage_status: list[str] = Query([], description="Triage status filter (OR)"),
+    stale: bool = Query(False, description="Only pastes changed since they were triaged"),
     date_from: str = Query(None, description="Filter by first_seen >= (YYYY-MM-DD)"),
     date_to: str = Query(None, description="Filter by first_seen <= (YYYY-MM-DD)"),
 ):
@@ -752,6 +804,7 @@ def api_llm_report(
             date_from=date_from,
             date_to=date_to,
             triage_status=triage_status or None,
+            stale=stale,
         )
     except QueryError:
         raise HTTPException(status_code=400, detail="Invalid search query")
@@ -783,6 +836,7 @@ def api_llm_report(
             date_to=date_to,
             limit=MAX_REPORT_PASTES,
             triage_status=triage_status or None,
+            stale=stale,
         ))
     except QueryError:
         llm.reset_report_progress()
@@ -897,6 +951,7 @@ def api_llm_report(
             "has_secrets": has_secrets,
             "secret_type": secret_type,
             "triage_status": triage_status,
+            "stale": stale,
             "date_from": date_from,
             "date_to": date_to,
         }

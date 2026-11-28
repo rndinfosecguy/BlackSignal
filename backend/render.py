@@ -151,7 +151,7 @@ def render_batch(
     out.append(f"**Pastes analyzed**: {total}")
     if filters:
         fparts = []
-        for key in ("q", "source", "content_type", "has_secrets", "secret_type", "triage_status", "date_from", "date_to"):
+        for key in ("q", "source", "content_type", "has_secrets", "secret_type", "triage_status", "stale", "date_from", "date_to"):
             value = filters.get(key)
             if value:
                 fparts.append(f"{key}={value}")

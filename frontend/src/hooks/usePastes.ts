@@ -8,6 +8,8 @@ export interface FilterState {
   types?: string[]
   secretTypes?: string[]
   triageStatuses?: string[]
+  stale?: boolean
+  sort?: string
   hasSecrets?: boolean
   page?: number
   groupBy?: string
@@ -34,6 +36,9 @@ export interface PasteResult {
   triage_note?: string
   triage_reviewer?: string
   triage_updated_at?: string | null
+  triage_auto?: number
+  triage_source?: string
+  duplicate_count?: number
   modified_at?: string | null
 }
 interface SearchResult { total: number; page: number; per_page: number; total_pages: number; results: PasteResult[] }
@@ -59,6 +64,8 @@ function queryString(state: FilterState): string {
   if (state.types) state.types.forEach(t => qp.append('content_type', t))
   if (state.secretTypes) state.secretTypes.forEach(st => qp.append('secret_type', st))
   if (state.triageStatuses) state.triageStatuses.forEach(ts => qp.append('triage_status', ts))
+  if (state.stale) qp.set('stale', 'true')
+  if (state.sort) qp.set('sort', state.sort)
   if (state.hasSecrets) qp.set('has_secrets', 'true')
   if (state.groupBy) qp.set('group_by', state.groupBy)
   if (state.dateFrom) qp.set('date_from', state.dateFrom)
@@ -307,4 +314,18 @@ export async function updateTriage(
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
   return data as TriageState
+}
+
+export async function applyTriageToIdentical(
+  id: string,
+  payload: { status: string; note?: string },
+): Promise<{ updated: number }> {
+  const res = await fetch(`${API_BASE}/pastes/${encodeURIComponent(id)}/triage/identical`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+  return data as { updated: number }
 }
